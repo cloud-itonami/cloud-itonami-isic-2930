@@ -36,6 +36,7 @@
   (:require #?(:clj  [clojure.edn :as edn]
                :cljs [cljs.reader :as edn])
             [autoparts.registry :as registry]
+            [autoparts.robotics :as robotics]
             [langchain.db :as d]))
 
 (defprotocol Store
@@ -56,47 +57,79 @@
 
 ;; ----------------------------- demo data -----------------------------
 
+(defn- with-proof-load-telemetry
+  "Merges REAL weld-joint/fastener proof-load pull-test telemetry onto
+  a demo part-lot's base fields -- `autoparts.robotics/pull-test-
+  telemetry-for` actually runs `run-pull-test`'s `physics-2d`-stepped
+  simulation for this part-lot's own `:joint-mass-kg` (ADR-2607152000),
+  so even the 'already on file' seed data (as if from an earlier real
+  pull-test report) is genuinely simulation-derived, never hand-typed
+  doubles."
+  [base]
+  (merge base (select-keys (robotics/pull-test-telemetry-for base)
+                           [:sim-proof-load-force :sim-peak-decel-mps2])))
+
 (defn demo-data
   "A small, self-contained part-lot set covering both actuation
   lifecycles (shipping a part-lot, issuing a PPAP certificate) so the
-  actor + tests run offline."
+  actor + tests run offline. `:joint-mass-kg` (ADR-2607152000) is a
+  permanent part-lot-design field (like `:dppm-actual`);
+  `:sim-proof-load-force`/`:sim-peak-decel-mps2` are the REAL
+  `autoparts.robotics/run-pull-test`-computed telemetry for that field
+  (`with-proof-load-telemetry`), the ground truth `autoparts.robotics/
+  simulation-out-of-tolerance?` independently rechecks. lot-5 (a
+  fastener-tightening lot) is DELIBERATELY recorded with a much lighter
+  `:joint-mass-kg` (0.6 kg, the scale of a small trim fastener) than a
+  structural joint of this kind should carry -- a genuine design-record
+  inconsistency (no real structural fastener/weld joint this actor
+  ships would spec down to a trim-clip-scale test mass) that the real,
+  re-run simulation catches on independent recheck even though
+  `:robotics-sim-verified?` was seeded `true` (\"already on file\", i.e.
+  someone/something marked it passed without this real check ever
+  having run) -- the auto-parts-manufacturer analog of automotive's
+  vehicle-5 misclassified pickup. lot-1..4's `:joint-mass-kg` values
+  (2.2-2.6 kg) are all genuinely consistent structural-joint test
+  masses, which all clear the real proof-load floor with margin (see
+  `autoparts.robotics/min-proof-load-n`)."
   []
   {:part-lots
-   {"lot-1" {:id "lot-1" :part-lot-name "Meridian Brake Pad Lot BP-2044"
-             :dppm-actual 45 :dppm-min 0 :dppm-max 300
-             :critical-dimension-deviation-actual 0.01 :critical-dimension-deviation-min -0.05 :critical-dimension-deviation-max 0.05
-             :process-capability-defect-unresolved? false
-             :robotics-sim-verified? false :robotics-sim-record nil
-             :part-lot-shipped? false :ppap-certified? false
-             :jurisdiction "JPN" :status :intake}
-    "lot-2" {:id "lot-2" :part-lot-name "Atlas Wiring Harness Lot WH-1187"
-             :dppm-actual 45 :dppm-min 0 :dppm-max 300
-             :critical-dimension-deviation-actual 0.01 :critical-dimension-deviation-min -0.05 :critical-dimension-deviation-max 0.05
-             :process-capability-defect-unresolved? false
-             :robotics-sim-verified? false :robotics-sim-record nil
-             :part-lot-shipped? false :ppap-certified? false
-             :jurisdiction "ATL" :status :intake}
-    "lot-3" {:id "lot-3" :part-lot-name "田中シートフレーム・ロット SF-215"
-             :dppm-actual 850 :dppm-min 0 :dppm-max 300
-             :critical-dimension-deviation-actual 0.01 :critical-dimension-deviation-min -0.05 :critical-dimension-deviation-max 0.05
-             :process-capability-defect-unresolved? false
-             :robotics-sim-verified? false :robotics-sim-record nil
-             :part-lot-shipped? false :ppap-certified? false
-             :jurisdiction "JPN" :status :intake}
-    "lot-4" {:id "lot-4" :part-lot-name "佐藤スタンピングパネル・ロット SP-330"
-             :dppm-actual 45 :dppm-min 0 :dppm-max 300
-             :critical-dimension-deviation-actual 0.01 :critical-dimension-deviation-min -0.05 :critical-dimension-deviation-max 0.05
-             :process-capability-defect-unresolved? true
-             :robotics-sim-verified? false :robotics-sim-record nil
-             :part-lot-shipped? false :ppap-certified? false
-             :jurisdiction "JPN" :status :intake}
-    "lot-5" {:id "lot-5" :part-lot-name "鈴木ファスナー締結ロット FT-118"
-             :dppm-actual 45 :dppm-min 0 :dppm-max 300
-             :critical-dimension-deviation-actual 0.12 :critical-dimension-deviation-min -0.05 :critical-dimension-deviation-max 0.05
-             :process-capability-defect-unresolved? false
-             :robotics-sim-verified? true :robotics-sim-record nil
-             :part-lot-shipped? false :ppap-certified? false
-             :jurisdiction "JPN" :status :intake}}})
+   (into {}
+         (map (fn [v] [(:id v) (with-proof-load-telemetry v)]))
+         [{:id "lot-1" :part-lot-name "Meridian Brake Pad Lot BP-2044"
+           :dppm-actual 45 :dppm-min 0 :dppm-max 300
+           :joint-mass-kg 2.5
+           :process-capability-defect-unresolved? false
+           :robotics-sim-verified? false :robotics-sim-record nil
+           :part-lot-shipped? false :ppap-certified? false
+           :jurisdiction "JPN" :status :intake}
+          {:id "lot-2" :part-lot-name "Atlas Wiring Harness Lot WH-1187"
+           :dppm-actual 45 :dppm-min 0 :dppm-max 300
+           :joint-mass-kg 2.2
+           :process-capability-defect-unresolved? false
+           :robotics-sim-verified? false :robotics-sim-record nil
+           :part-lot-shipped? false :ppap-certified? false
+           :jurisdiction "ATL" :status :intake}
+          {:id "lot-3" :part-lot-name "田中シートフレーム・ロット SF-215"
+           :dppm-actual 850 :dppm-min 0 :dppm-max 300
+           :joint-mass-kg 2.6
+           :process-capability-defect-unresolved? false
+           :robotics-sim-verified? false :robotics-sim-record nil
+           :part-lot-shipped? false :ppap-certified? false
+           :jurisdiction "JPN" :status :intake}
+          {:id "lot-4" :part-lot-name "佐藤スタンピングパネル・ロット SP-330"
+           :dppm-actual 45 :dppm-min 0 :dppm-max 300
+           :joint-mass-kg 2.4
+           :process-capability-defect-unresolved? true
+           :robotics-sim-verified? false :robotics-sim-record nil
+           :part-lot-shipped? false :ppap-certified? false
+           :jurisdiction "JPN" :status :intake}
+          {:id "lot-5" :part-lot-name "鈴木ファスナー締結ロット FT-118"
+           :dppm-actual 45 :dppm-min 0 :dppm-max 300
+           :joint-mass-kg 0.6
+           :process-capability-defect-unresolved? false
+           :robotics-sim-verified? true :robotics-sim-record nil
+           :part-lot-shipped? false :ppap-certified? false
+           :jurisdiction "JPN" :status :intake}])})
 
 ;; ----------------------------- shared commit logic -----------------------------
 
@@ -208,7 +241,7 @@
 (defn- dec* [s] (when s (edn/read-string s)))
 
 (defn- part-lot->tx [{:keys [id part-lot-name dppm-actual dppm-min dppm-max
-                              critical-dimension-deviation-actual critical-dimension-deviation-min critical-dimension-deviation-max
+                              joint-mass-kg sim-proof-load-force sim-peak-decel-mps2
                               process-capability-defect-unresolved? robotics-sim-verified? robotics-sim-record
                               part-lot-shipped? ppap-certified?
                               jurisdiction status shipment-number certificate-number]}]
@@ -217,9 +250,9 @@
     dppm-actual                                 (assoc :part-lot/dppm-actual dppm-actual)
     dppm-min                                    (assoc :part-lot/dppm-min dppm-min)
     dppm-max                                    (assoc :part-lot/dppm-max dppm-max)
-    critical-dimension-deviation-actual         (assoc :part-lot/critical-dimension-deviation-actual critical-dimension-deviation-actual)
-    critical-dimension-deviation-min            (assoc :part-lot/critical-dimension-deviation-min critical-dimension-deviation-min)
-    critical-dimension-deviation-max            (assoc :part-lot/critical-dimension-deviation-max critical-dimension-deviation-max)
+    joint-mass-kg                                (assoc :part-lot/joint-mass-kg joint-mass-kg)
+    sim-proof-load-force                         (assoc :part-lot/sim-proof-load-force sim-proof-load-force)
+    (some? sim-peak-decel-mps2)                  (assoc :part-lot/sim-peak-decel-mps2 sim-peak-decel-mps2)
     (some? process-capability-defect-unresolved?) (assoc :part-lot/process-capability-defect-unresolved? process-capability-defect-unresolved?)
     (some? robotics-sim-verified?)               (assoc :part-lot/robotics-sim-verified? robotics-sim-verified?)
     (some? robotics-sim-record)                  (assoc :part-lot/robotics-sim-record (enc robotics-sim-record))
@@ -233,7 +266,7 @@
 (def ^:private part-lot-pull
   [:part-lot/id :part-lot/part-lot-name :part-lot/dppm-actual
    :part-lot/dppm-min :part-lot/dppm-max
-   :part-lot/critical-dimension-deviation-actual :part-lot/critical-dimension-deviation-min :part-lot/critical-dimension-deviation-max
+   :part-lot/joint-mass-kg :part-lot/sim-proof-load-force :part-lot/sim-peak-decel-mps2
    :part-lot/process-capability-defect-unresolved? :part-lot/robotics-sim-verified? :part-lot/robotics-sim-record
    :part-lot/part-lot-shipped? :part-lot/ppap-certified?
    :part-lot/jurisdiction :part-lot/status :part-lot/shipment-number :part-lot/certificate-number])
@@ -244,9 +277,9 @@
      :dppm-actual (:part-lot/dppm-actual m)
      :dppm-min (:part-lot/dppm-min m)
      :dppm-max (:part-lot/dppm-max m)
-     :critical-dimension-deviation-actual (:part-lot/critical-dimension-deviation-actual m)
-     :critical-dimension-deviation-min (:part-lot/critical-dimension-deviation-min m)
-     :critical-dimension-deviation-max (:part-lot/critical-dimension-deviation-max m)
+     :joint-mass-kg (:part-lot/joint-mass-kg m)
+     :sim-proof-load-force (:part-lot/sim-proof-load-force m)
+     :sim-peak-decel-mps2 (:part-lot/sim-peak-decel-mps2 m)
      :process-capability-defect-unresolved? (boolean (:part-lot/process-capability-defect-unresolved? m))
      :robotics-sim-verified? (boolean (:part-lot/robotics-sim-verified? m))
      :robotics-sim-record (dec* (:part-lot/robotics-sim-record m))

@@ -76,14 +76,14 @@
     (println "== actuation/ship-part-lot lot-3 before robotics simulation -> HARD hold (robotics-simulation-missing) ==")
     (println (exec! actor "t7b" {:op :actuation/ship-part-lot :subject "lot-3"} operator))
 
-    (println "== robotics/simulate-inspection-cell lot-3 (clean critical-dimension deviation; escalates -- human approves) ==")
+    (println "== robotics/simulate-inspection-cell lot-3 (real physics-2d proof-load pull-test simulation clears the floor; escalates -- human approves) ==")
     (println (exec! actor "t7c" {:op :robotics/simulate-inspection-cell :subject "lot-3"} operator))
     (println (approve! actor "t7c"))
 
     (println "== actuation/ship-part-lot lot-3 (850 dppm outside [0,300] quality-agreement bounds -> HARD hold) ==")
     (println (exec! actor "t8" {:op :actuation/ship-part-lot :subject "lot-3"} operator))
 
-    (println "== actuation/ship-part-lot lot-5 (robotics-sim on file, but critical-dimension deviation 0.12 outside [-0.05,0.05] tolerance on independent recheck -> HARD hold) ==")
+    (println "== actuation/ship-part-lot lot-5 (robotics-sim on file, but real physics-2d-simulated proof load falls below the minimum required floor on independent recheck -> HARD hold) ==")
     (println (exec! actor "t8b" {:op :ppap-evidence/verify :subject "lot-5"} operator))
     (println (approve! actor "t8b"))
     (println (exec! actor "t8c" {:op :actuation/ship-part-lot :subject "lot-5"} operator))

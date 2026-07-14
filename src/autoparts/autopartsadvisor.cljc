@@ -112,12 +112,13 @@
 (defn- simulate-inspection-cell
   "Runs the robot CMM/torque/weld-inspection verification mission
   (`autoparts.robotics`) and drafts its result as a proposal. High
-  confidence -- the mission itself is deterministic simulated
-  telemetry derived from the part-lot's own recorded critical-
-  dimension-deviation fields, not an LLM guess; the Auto-Parts
-  Governor still independently re-derives :passed? from those same
-  fields before any `:actuation/ship-part-lot` proposal may commit --
-  see `autoparts.governor`'s `robotics-simulation-violations`."
+  confidence -- the mission itself is REAL `physics-2d`-simulated
+  weld-joint/fastener proof-load pull-test telemetry derived from the
+  part-lot's own recorded `:joint-mass-kg` (ADR-2607152000), not an LLM
+  guess; the Auto-Parts Governor still independently re-derives
+  :passed? from that same telemetry before any `:actuation/ship-part-
+  lot` proposal may commit -- see `autoparts.governor`'s `robotics-
+  simulation-violations`."
   [db {:keys [subject]}]
   (let [a (store/part-lot db subject)]
     (if (nil? a)
@@ -127,7 +128,7 @@
       (let [{:keys [mission actions passed?]} (robotics/simulate-inspection-cell subject a)]
         {:summary    (str subject ": CMM/トルク/溶接検査ロボット検証ミッション " (if passed? "合格" "不合格"))
          :rationale  (str "mission=" (:mission/id mission) " actions=" (count actions)
-                          " critical-dimension-deviation-actual=" (:critical-dimension-deviation-actual a))
+                          " sim-proof-load-force=" (:sim-proof-load-force a))
          :cites      [(:mission/id mission)]
          :effect     :part-lot/upsert
          :value      {:id subject

@@ -47,10 +47,15 @@
                                        part-lot (`:robotics-sim-
                                        verified?`)? AND INDEPENDENTLY
                                        recompute whether the part-
-                                       lot's own recorded critical-
-                                       dimension-deviation reading
-                                       falls out of its own recorded
-                                       tolerance bounds (`autoparts.
+                                       lot's own recorded REAL
+                                       `physics-2d`-simulated weld-
+                                       joint/fastener proof-load
+                                       pull-test telemetry
+                                       (`:sim-proof-load-force`, from
+                                       ADR-2607152000's real
+                                       time-stepped simulation) falls
+                                       below the real minimum required
+                                       proof load (`autoparts.
                                        robotics/simulation-out-of-
                                        tolerance?`), ignoring whatever
                                        :passed? verdict the mission run
@@ -164,12 +169,13 @@
   "For `:actuation/ship-part-lot`: HARD hold if the robot CMM/torque/
   weld-inspection verification mission (`autoparts.robotics`) never
   ran and was recorded on the part-lot (`:robotics-sim-verified?`), OR
-  if it did but an INDEPENDENT recompute of the part-lot's own
-  critical-dimension-deviation fields (`autoparts.robotics/
-  simulation-out-of-tolerance?`) says out-of-tolerance right now --
-  never trusts the mission's own stored :passed? verdict alone, the
-  same discipline `part-lot-dppm-out-of-range-violations` below uses
-  for DPPM."
+  if it did but an INDEPENDENT recompute of the part-lot's own REAL
+  `physics-2d`-simulated weld-joint/fastener proof-load pull-test
+  telemetry (`:sim-proof-load-force`, ADR-2607152000 --
+  `autoparts.robotics/simulation-out-of-tolerance?`) says
+  out-of-tolerance right now -- never trusts the mission's own stored
+  :passed? verdict alone, the same discipline `part-lot-dppm-out-of-
+  range-violations` below uses for DPPM."
   [{:keys [op subject]} st]
   (when (= op :actuation/ship-part-lot)
     (let [a (store/part-lot st subject)]
@@ -180,9 +186,8 @@
 
         (robotics/simulation-out-of-tolerance? a)
         [{:rule :robotics-simulation-out-of-tolerance
-          :detail (str subject " の重要寸法偏差実測値("
-                       (:critical-dimension-deviation-actual a) ")が独立再検証で許容範囲["
-                       (:critical-dimension-deviation-min a) "," (:critical-dimension-deviation-max a) "]を逸脱")}]))))
+          :detail (str subject " の実測プルーフロード(" (:sim-proof-load-force a)
+                       "N)が独立再検証で許容下限(" robotics/min-proof-load-n "N)を下回る")}]))))
 
 (defn- part-lot-dppm-out-of-range-violations
   "For `:actuation/ship-part-lot`, INDEPENDENTLY recompute whether the

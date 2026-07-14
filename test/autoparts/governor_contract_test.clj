@@ -47,8 +47,9 @@
 (defn- simulate-robotics!
   "Walks `subject` through the robot CMM/torque/weld-inspection
   verification mission -> approve, leaving `:robotics-sim-verified?`
-  on file. Only meaningful to call for a part-lot whose critical-
-  dimension-deviation is actually within tolerance -- an out-of-
+  on file. Only meaningful to call for a part-lot whose REAL
+  `physics-2d`-simulated proof-load pull-test telemetry
+  (`:sim-proof-load-force`) is actually within tolerance -- an out-of-
   tolerance part-lot still gets :robotics-sim-verified? recorded (per
   whatever the mission itself found), but `autoparts.governor`'s
   independent recheck HARD-holds regardless (see
@@ -179,7 +180,7 @@
       (is (empty? (store/shipment-history db))))))
 
 (deftest robotics-simulation-out-of-tolerance-is-held
-  (testing "lot-5 has a robotics-sim already on file, but its own critical-dimension-deviation reading falls outside its own tolerance bounds on INDEPENDENT recheck -> HOLD, never trusts the on-file verdict alone"
+  (testing "lot-5 has a robotics-sim already on file, but its own REAL physics-2d-simulated proof-load pull-test reading falls below the minimum required floor on INDEPENDENT recheck -> HOLD, never trusts the on-file verdict alone"
     (let [[db actor] (fresh)
           _ (verify! actor "t13pre" "lot-5")
           res (exec-op actor "t13" {:op :actuation/ship-part-lot :subject "lot-5"} operator)]

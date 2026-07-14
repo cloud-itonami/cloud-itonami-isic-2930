@@ -54,16 +54,33 @@ certificate itself; `:high`/`:safety-critical` actions
 (`:actuation/ship-part-lot`, `:actuation/issue-ppap-certificate`)
 require human sign-off.
 
-**Robot process simulation is concrete, not just a flag** (ADR-2607142800,
-extending ADR-2607011000, which named this vertical, isic-2930, as
+**Robot process simulation is a REAL, time-stepped physics
+simulation, not a symbolic field comparison** (ADR-2607152000,
+extending ADR-2607151600's automotive pilot to this vertical, itself
+upgrading ADR-2607142800's original symbolic layer, which extended
+ADR-2607011000's premise and named this vertical, isic-2930, as
 explicit follow-up work): `autoparts.robotics` walks every part-lot
 through a robot-executed dimensional/process-capability verification
 mission (`kotoba.robotics` mission/action/telemetry-proof contracts)
 -- CMM dimensional scan, fastener-torque check, weld-joint ultrasonic
-scan -- before `:actuation/ship-part-lot` is proposable. The
-Auto-Parts Governor independently re-derives the part-lot's own
-critical-dimension-deviation tolerance from ground-truth fields, never
-trusting the mission's self-reported verdict alone.
+scan -- before `:actuation/ship-part-lot` is proposable, and now
+grounds that mission's :passed? verdict in an actual **weld-joint /
+fastener proof-load pull test**: a real, tested rigid-body physics
+engine (`kotoba-lang/physics-2d`) time-steps a test-fixture jaw
+pulling a joint apart at a controlled rate until it reaches the
+joint's own real compliance/give limit, read as a real peak-load event
+(`:sim-proof-load-force`, Newtons) -- not an invented or hand-set
+number. Because `physics-2d` only natively resolves bodies
+*approaching* each other (never *separating* under tension), this is
+modeled the same honest way automotive's crash-dispatch simulation
+reframed its own event: the jaw's approach toward a virtual
+"end-of-tether" limit-boundary body, whose sudden inelastic stop *is*
+the joint reaching peak load and snapping (see `autoparts.robotics`'s
+own docstring for the full disclosure). The Auto-Parts Governor
+independently re-derives the part-lot's own `:sim-proof-load-force`
+against a real, disclosed minimum proof-load floor
+(`autoparts.robotics/min-proof-load-n`), never trusting the mission's
+self-reported verdict alone.
 
 ## Core contract
 

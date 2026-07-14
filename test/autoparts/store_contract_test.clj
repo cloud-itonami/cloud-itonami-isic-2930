@@ -24,7 +24,11 @@
       (is (true? (:process-capability-defect-unresolved? (store/part-lot s "lot-4"))))
       (is (false? (:robotics-sim-verified? (store/part-lot s "lot-1"))) "no robotics mission has run yet")
       (is (true? (:robotics-sim-verified? (store/part-lot s "lot-5"))) "seeded as already-on-file")
-      (is (= 0.12 (:critical-dimension-deviation-actual (store/part-lot s "lot-5"))))
+      (is (= 0.6 (:joint-mass-kg (store/part-lot s "lot-5"))))
+      (is (< (:sim-proof-load-force (store/part-lot s "lot-5")) 3500.0)
+          "lot-5's real physics-2d-simulated proof load falls below the minimum floor")
+      (is (> (:sim-proof-load-force (store/part-lot s "lot-1")) 3500.0)
+          "lot-1's real physics-2d-simulated proof load clears the minimum floor")
       (is (false? (:part-lot-shipped? (store/part-lot s "lot-1"))))
       (is (false? (:ppap-certified? (store/part-lot s "lot-1"))))
       (is (= ["lot-1" "lot-2" "lot-3" "lot-4" "lot-5"]
