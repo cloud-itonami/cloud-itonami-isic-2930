@@ -1,0 +1,12 @@
+{:itonami.blueprint/id "cloud-itonami-isic-2930"
+ :itonami.blueprint/name "Manufacture of Parts and Accessories for Motor Vehicles"
+ :itonami.blueprint/isic-rev5 "2930"
+ :itonami.blueprint/domain :manufacturing/motor-vehicle-parts
+ :itonami.blueprint/license "AGPL-3.0-or-later"
+ :itonami.blueprint/social-impact [:vehicle-safety :supply-resilience :industrial-jobs]
+ :itonami.blueprint/governor :autoparts-governor
+ :itonami.blueprint/robotics true
+ :itonami.blueprint/required-technologies [:robotics :cae :dmn :bpmn :audit-ledger]
+ :itonami.blueprint/optional-technologies [:cfd :telemetry :optimization]
+ :itonami.blueprint/status :public-oss
+ :itonami.blueprint/maturity :implemented}

@@ -1,0 +1,65 @@
+<html><head><meta charset="utf-8"><title>cloud-itonami-isic-2930 · auto-parts plant</title><style>
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ok { color: #137a3f; }
+body { font-family: system-ui,-apple-system,sans-serif; margin: 0; color: #1a1a1a; background: #fafafa; }
+header.bar { display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: #fff; border-bottom: 1px solid #e5e5e5; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #f0f0f0; }
+h2 { margin-top: 0; font-size: 15px; }
+.warn { color: #b25c00; background: #fff8e1; padding: 2px 6px; border-radius: 4px; }
+main { max-width: 980px; margin: 24px auto; padding: 0 20px; }
+header.bar h1 { font-size: 18px; margin: 0; font-weight: 600; }
+.muted { color: #888; font-size: 13px; }
+.critical { color: #fff; background: #b3261e; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+.card { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.err { color: #b3261e; background: #fbe9e7; padding: 2px 6px; border-radius: 4px; }
+th { font-weight: 600; color: #555; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+header.bar .badge { margin-left: auto; font-size: 12px; color: #666; }
+code { font-size: 12px; background: #f4f4f4; padding: 1px 4px; border-radius: 3px; }
+</style></head><body>
+<header class="bar">
+  <h1>Auto-parts plant (ISIC 2930) — Operator Console</h1>
+  <span class="badge">read-only sample · governor-gated · never dispatches hardware</span>
+</header>
+<main>
+  <section class="card">
+    <h2>Part-lots</h2>
+    <p class="muted">Demo snapshot — live data from <code>autoparts.store</code> / <code>clojure -M:dev:run</code>.</p>
+    <table>
+      <thead><tr><th>Lot</th><th>Name</th><th>Jurisdiction</th><th>DPPM</th><th>Process capability</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>lot-1</td><td>Meridian Brake Pad Lot BP-2044</td><td>JPN</td><td class="ok">45 ∈ [0,300]</td><td class="ok">resolved</td><td class="ok">ready</td></tr>
+        <tr><td>lot-2</td><td>Atlas Wiring Harness Lot WH-1187</td><td>ATL</td><td class="ok">in-spec</td><td class="ok">—</td><td><span class="err">no spec-basis</span></td></tr>
+        <tr><td>lot-3</td><td>田中シートフレーム・ロット SF-215</td><td>JPN</td><td><span class="err">850 out of range</span></td><td class="ok">—</td><td><span class="warn">HARD hold on shipment</span></td></tr>
+        <tr><td>lot-4</td><td>佐藤スタンピングパネル・ロット SP-330</td><td>JPN</td><td class="ok">in-spec</td><td><span class="err">unresolved</span></td><td><span class="critical">process-capability hold</span></td></tr>
+        <tr><td>lot-5</td><td>鈴木ファスナー締結ロット FT-118</td><td>JPN</td><td class="ok">in-spec</td><td class="ok">resolved</td><td><span class="warn">robotics-sim out-of-tolerance</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Action gate (Auto-Parts Governor)</h2>
+    <p class="muted">HARD holds cannot be overridden. Actuation always escalates to a human quality engineer.</p>
+    <table>
+      <thead><tr><th>Op</th><th>Stake</th><th>Gate</th></tr></thead>
+      <tbody>
+        <tr><td><code>:part-lot/intake</code></td><td>none</td><td><span class="ok">phase-3 auto when clean</span></td></tr>
+        <tr><td><code>:ppap-evidence/verify</code></td><td>none</td><td><span class="warn">human approval · no fabricated PPAP rules</span></td></tr>
+        <tr><td><code>:process-capability/screen</code></td><td>none</td><td><span class="critical">HARD hold if unresolved defect</span></td></tr>
+        <tr><td><code>:robotics/simulate-inspection-cell</code></td><td>low</td><td><span class="warn">human approval · CMM/torque/weld mission</span></td></tr>
+        <tr><td><code>:actuation/ship-part-lot</code></td><td class="critical">safety-critical</td><td><span class="warn">always human · DPPM + robotics + evidence checks</span></td></tr>
+        <tr><td><code>:actuation/issue-ppap-certificate</code></td><td class="critical">safety-critical</td><td><span class="warn">always human · process-capability + double-issue guard</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Social hand-off</h2>
+    <p class="muted">Audit package for OEM quality auditors / market-regulator inspectors — <code>autoparts.export/audit-package</code> and <code>package-&gt;csv-bundle</code> (part-lots / ledger / shipments / ppap-certificates CSV).</p>
+    <table>
+      <thead><tr><th>Artifact</th><th>Kind</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td>JPN-SHP-000000</td><td>part-lot-shipment-draft</td><td>unsigned · plant signs offline</td></tr>
+        <tr><td>JPN-PPAP-000000</td><td>ppap-certificate-draft</td><td>unsigned · OEM supplier-portal submission is plant act</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body></html>
