@@ -22,7 +22,26 @@
         ;; ONLY new dependency is physics-2d itself.
         io.github.kotoba-lang/physics-2d
         {:git/url "https://github.com/kotoba-lang/physics-2d.git"
-         :sha "03b6c23c8d9aa36b92a8130fd3e37fc2548b4d26"}}
+         :sha "03b6c23c8d9aa36b92a8130fd3e37fc2548b4d26"}
+        ;; REAL CAD/BREP bridge (ADR-2607160000, extending ADR-2607152000/
+        ;; ADR-2607151600's real-engineering-simulation pattern to this
+        ;; vertical's own digital-twin pilot): autoparts.cad now actually
+        ;; builds+tessellates a BREP packaging envelope for a part-lot's
+        ;; test-specimen/joint coupon via org-iso-10303's brep.feature/
+        ;; brep.tessellate, the SAME kernel automotive's vdesign.cad already
+        ;; depends on -- not a new CAD kernel written for this actor. As
+        ;; with physics-2d above, this vertical has no sibling design-
+        ;; library repo, so the dependency is taken directly here rather
+        ;; than through a paired repo the way automotive's
+        ;; kami-engine-vehicle-designer dependency works. Deliberately NOT
+        ;; added: kotoba-lang/webgpu (autoparts.scene matches its
+        ;; kami.webgpu.mesh DATA shape only -- that lib is .cljs-only, real
+        ;; GPU device/buffer calls, unusable in this JVM/.cljc actor repo;
+        ;; see autoparts.scene's docstring for the same disclosed limitation
+        ;; vdesign.scene documents).
+        io.github.kotoba-lang/org-iso-10303
+        {:git/url "https://github.com/kotoba-lang/org-iso-10303.git"
+         :sha "a1de3b075bcdcfbfb75c781eb88e3d07195831cf"}}
  :aliases
  {;; offline workspace dev -- pin transitive langchain to local checkout
   :dev {:override-deps
