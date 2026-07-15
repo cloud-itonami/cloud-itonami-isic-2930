@@ -20,9 +20,31 @@
   SIBLING design-library repo, `kami-engine-vehicle-designer`, because
   that pairing already existed via `vehicle-design-link`,
   ADR-2607083500), this vertical has no such sibling -- ADR-2607152000
-  explicitly builds the physics module DIRECTLY in this ns, taking a
+  explicitly built the physics module DIRECTLY in this ns, taking a
   real git-coordinate dependency on `kotoba-lang/physics-2d` alone
-  (see deps.edn), no BREP/CAM/webgpu-scene bridge.
+  (see deps.edn).
+
+  ADR-2607160000 EXTENDS this ns with a real CAD/BREP bridge, closing
+  the gap this ns's docstring used to disclose ('this ns has no CAD/
+  BREP pipeline, unlike automotive's envelope-solid bridge'): the
+  `:jaw` body's AABB half-extents are now genuinely derived from
+  `autoparts.cad/envelope-dims-mm`'s tessellated packaging-envelope
+  dims for THIS part-lot (mirroring `vdesign.simphysics/vehicle-half-
+  extents-m`'s own read of `vdesign.cad/envelope-solid`), instead of
+  being bare fixed constants. Honest, disclosed limit this does NOT
+  close: `autoparts.cad`'s envelope is still a coarse bounding BOX (see
+  that ns's docstring), not the actual weld-nugget/fastener-thread
+  geometry -- and, as documented below at `run-pull-test`, this
+  geometry only changes the simulated WORLD's spatial layout
+  (`:trajectory` positions), never `:sim-peak-decel-mps2`/`:sim-proof-
+  load-force` themselves, a real, verified property of this ns's
+  'boxcar' single-tick collision technique (see below), not an
+  oversight. `:fixture`/`:limit-boundary` remain FIXED test-rig
+  constants, unchanged -- mirroring how `vdesign.simphysics` only ever
+  derives the MOVING body (the vehicle) from CAD and leaves its static
+  barrier fixed; `:limit-boundary` in particular has no physical
+  counterpart at all (see its own docstring below), so there is nothing
+  real for CAD to size it against.
 
   HONEST REINTERPRETATION TECHNIQUE (mirrors automotive's own
   disclosed 'reaching end-of-tether, not literally crashing into a
@@ -122,7 +144,8 @@
   real load-cell/DAQ connection, or a real robot controller -- still
   simulation, not control, the same 'policy, not control' boundary
   `kotoba.robotics`'s docstring already establishes."
-  (:require [kotoba.robotics :as robotics]
+  (:require [autoparts.cad :as cad]
+            [kotoba.robotics :as robotics]
             [physics-2d :as p2d]))
 
 ;; ---------------------------------------------------------------------------
@@ -173,25 +196,41 @@
   0.0005)
 
 (def ^:const jaw-half-w-m
-  "Jaw AABB half-width along the pull axis (m) -- a small, fixed
-  test-fixture-jaw footprint, not a per-lot geometry input (this ns has
-  no CAD/BREP pipeline, unlike automotive's envelope-solid bridge)."
+  "Jaw AABB half-width along the pull axis (m) -- ADR-2607160000: no
+  longer read directly by `run-pull-test` (superseded by `autoparts.
+  cad`-derived per-part-lot dims, see `specimen-half-extents-m`
+  below), retained as a disclosed reference figure -- `autoparts.cad/
+  default-specimen-length-mm` is DELIBERATELY defined to reproduce this
+  exact half-width (20 mm full length / 2 = 0.01 m) when a part-lot
+  carries no real `:specimen-length-mm`, so a part-lot with nothing on
+  file gets the SAME jaw size this ns used before this ADR."
   0.01)
 
-(def ^:const jaw-half-h-m 0.05)
+(def ^:const jaw-half-h-m
+  "Jaw AABB half-height (m), lateral -- see `jaw-half-w-m`; `autoparts.
+  cad/default-specimen-width-mm` reproduces this exact figure (100 mm
+  full width / 2 = 0.05 m)."
+  0.05)
 
 (def ^:const fixture-half-w-m
   "Part-lot-side fixture AABB half-width (m) -- static anchor, never
   actually collides with anything (the jaw moves AWAY from it), present
   purely as a real Body2D so the simulated world honestly contains both
-  sides of the joint being pulled apart."
+  sides of the joint being pulled apart. ADR-2607160000: unlike the
+  jaw, this stays a FIXED test-rig constant, not CAD-derived -- mirrors
+  `vdesign.simphysics` leaving its static barrier fixed while only the
+  moving vehicle body derives from CAD."
   0.01)
 
 (def ^:const fixture-half-h-m 0.05)
 
 (def ^:const limit-boundary-half-w-m
   "Virtual limit-boundary AABB half-width (m) -- the 'end of tether'
-  wall the jaw's approach is reframed against; see ns docstring."
+  wall the jaw's approach is reframed against; see ns docstring.
+  ADR-2607160000: stays FIXED, never CAD-derived -- this body has no
+  physical counterpart at all (it is a pure math device standing in for
+  the joint running out of give), so there is nothing real for CAD to
+  size it against."
   0.01)
 
 (def ^:const limit-boundary-half-h-m 0.05)
@@ -221,6 +260,32 @@
 
 ;; ------------------------------ real simulation ------------------------------
 
+(defn- as-part-lot-map
+  "Normalizes `run-pull-test`'s first argument: a bare number is a
+  legacy/no-coupon-geometry caller and is treated as `{:joint-mass-kg
+  n}` (so `autoparts.cad/envelope-dims-mm` falls back to its disclosed
+  defaults, below); a map (a real part-lot record, optionally carrying
+  `:specimen-length-mm`/`:specimen-width-mm`) is passed through
+  unchanged."
+  [part-lot-or-mass]
+  (if (map? part-lot-or-mass) part-lot-or-mass {:joint-mass-kg part-lot-or-mass}))
+
+(defn- specimen-half-extents-m
+  "AABB half-extents (m) for the `:jaw` body, from `autoparts.cad/
+  envelope-dims-mm`'s REAL tessellated dims (mm) for `part-lot` --
+  travel-axis half-width = length/2, lateral half-height = width/2.
+  Direct port of `vdesign.simphysics/vehicle-half-extents-m`'s length/
+  width-only reading of `vdesign.cad`. `envelope-dims-mm` always
+  returns SOME dims (a part-lot's own real `:specimen-*-mm` fields when
+  present, this ns's disclosed fixture-scale defaults when absent --
+  see `autoparts.cad`'s docstring), so this always succeeds; it is the
+  INPUT (whether `part-lot` carries real coupon measurements) that
+  varies, not this function's availability."
+  [part-lot]
+  (let [{:keys [length-mm width-mm]} (cad/envelope-dims-mm part-lot)]
+    {:half-w (/ length-mm 2000.0)
+     :half-h (/ width-mm 2000.0)}))
+
 (defn run-pull-test
   "Time-steps a REAL `physics-2d` world for the weld-joint/fastener
   proof-load pull test and returns:
@@ -229,8 +294,16 @@
      :sim-peak-decel-mps2 n :sim-proof-load-force n
      :ticks n :dt n :test-speed-mps n :travel-to-failure-m n}
 
-  `joint-mass-kg` is the part-lot's own recorded effective
-  participating mass (moving jaw + locally-engaged specimen material).
+  `part-lot-or-mass` is EITHER the part-lot's own recorded effective
+  participating mass (moving jaw + locally-engaged specimen material,
+  a bare number -- legacy/no-coupon-geometry callers) OR the full
+  part-lot map (with `:joint-mass-kg` and, optionally, a real
+  `:specimen-length-mm`/`:specimen-width-mm`/`:specimen-height-mm`
+  coupon-envelope measurement -- ADR-2607160000). Either way the
+  `:jaw` body's AABB is sized via `specimen-half-extents-m`
+  (`autoparts.cad`-derived, real-or-disclosed-default); `:fixture`/
+  `:limit-boundary` always use their own fixed constants (see those
+  defs' docstrings for why).
   opts (all optional, for tuning/testing): `:test-speed-mps`,
   `:travel-to-failure-m`, `:initial-grip-slack-m`, `:dt` overrides
   (each defaults to this ns's own constant of the same name).
@@ -240,16 +313,39 @@
   actual simulated velocity trajectory, not invented.
   `:sim-proof-load-force` is `:sim-peak-decel-mps2 * joint-mass-kg`
   (Newtons) -- see ns docstring for why mass legitimately scales this
-  reading (unlike automotive's mass-invariant `:sim-decel-g`)."
-  [joint-mass-kg & [{v-opt :test-speed-mps travel-opt :travel-to-failure-m
-                      slack-opt :initial-grip-slack-m dt-opt :dt}]]
-  (let [v      (double (or v-opt test-speed-mps))
+  reading (unlike automotive's mass-invariant `:sim-decel-g`).
+
+  GEOMETRY-INVARIANCE, disclosed (mirrors automotive's own disclosed
+  mass-invariance of `:sim-decel-g`): the `:jaw`/`:fixture`/`:limit-
+  boundary` placement below is deliberately arranged so the FACE-TO-
+  FACE gap the jaw must close is always exactly `slack + travel`,
+  regardless of any body's AABB half-extents (they cancel out of the
+  placement algebra by construction -- widening/narrowing the jaw only
+  shifts every body's CENTER position by the same amount, never the
+  face-to-face gap). Consequently `:sim-peak-decel-mps2`/`:sim-proof-
+  load-force`/`:ticks`/`:dt` are IDENTICAL whether `part-lot-or-mass`
+  carries real coupon dims or falls back to defaults -- only
+  `:trajectory`'s absolute `:position` values (and, if a caller reads
+  them, `:jaw`'s AABB size) change. This is a genuine, verified
+  property of this ns's single-tick 'boxcar' collision technique (the
+  jaw always covers the SAME `slack + travel` gap at the SAME `dt`),
+  not a bug and not something CAD integration was expected to change --
+  a real load-cell force reading in this idealization is driven by
+  test SPEED, joint MASS, and the joint's own compliance/give
+  (`travel-to-failure-m`), never by the fixture/specimen's outer
+  bounding-box size."
+  [part-lot-or-mass & [{v-opt :test-speed-mps travel-opt :travel-to-failure-m
+                         slack-opt :initial-grip-slack-m dt-opt :dt}]]
+  (let [part-lot (as-part-lot-map part-lot-or-mass)
+        joint-mass-kg (double (:joint-mass-kg part-lot))
+        v      (double (or v-opt test-speed-mps))
         travel (double (or travel-opt travel-to-failure-m))
         slack  (double (or slack-opt initial-grip-slack-m))
         dt     (double (or dt-opt (/ travel v)))
+        {:keys [half-w half-h]} (specimen-half-extents-m part-lot)
         fixture-x 0.0
-        jaw-x0 (+ fixture-x fixture-half-w-m jaw-half-w-m)
-        limit-boundary-x (+ jaw-x0 slack travel jaw-half-w-m limit-boundary-half-w-m)
+        jaw-x0 (+ fixture-x fixture-half-w-m half-w)
+        limit-boundary-x (+ jaw-x0 slack travel half-w limit-boundary-half-w-m)
         approach-m (+ slack travel)
         ticks (long (+ settle-ticks (long (ceil* (/ approach-m (* v dt))))))
         fixture (p2d/make-body {:position [fixture-x 0.0]
@@ -261,10 +357,10 @@
                                  :user-data :fixture})
         jaw (p2d/make-body {:position [jaw-x0 0.0]
                              :velocity [v 0.0]
-                             :mass (double joint-mass-kg)
+                             :mass joint-mass-kg
                              :restitution 0.0
                              :friction 0.0
-                             :collider (p2d/make-aabb-collider jaw-half-w-m jaw-half-h-m)
+                             :collider (p2d/make-aabb-collider half-w half-h)
                              :user-data :jaw})
         limit-boundary (p2d/make-body {:position [limit-boundary-x 0.0]
                                         :velocity [0.0 0.0]
@@ -287,21 +383,27 @@
                               (reduce max 0.0))]
     {:trajectory trajectory
      :sim-peak-decel-mps2 peak-decel-mps2
-     :sim-proof-load-force (* peak-decel-mps2 (double joint-mass-kg))
+     :sim-proof-load-force (* peak-decel-mps2 joint-mass-kg)
      :ticks (count trajectory)
      :dt dt
      :test-speed-mps v
      :travel-to-failure-m travel}))
 
 (defn pull-test-telemetry-for
-  "Runs the REAL `run-pull-test` `physics-2d` simulation for
-  `part-lot`'s own recorded `:joint-mass-kg` and returns the actual
+  "Runs the REAL `run-pull-test` `physics-2d` simulation for `part-lot`
+  (its own recorded `:joint-mass-kg`, plus, when present, its own real
+  `:specimen-length-mm`/`:specimen-width-mm`/`:specimen-height-mm`
+  coupon-envelope measurement -- ADR-2607160000, `run-pull-test`'s
+  `part-lot-or-mass` accepts the full map) and returns the actual
   simulated trajectory telemetry: `{:sim-proof-load-force n
   :sim-peak-decel-mps2 n :ticks n :dt n :test-speed-mps n
-  :travel-to-failure-m n}`. Pure, deterministic -- the same
-  `:joint-mass-kg` always reproduces the same telemetry."
+  :travel-to-failure-m n}`. Pure, deterministic -- the same `part-lot`
+  always reproduces the same telemetry. Per `run-pull-test`'s disclosed
+  geometry-invariance, `:sim-proof-load-force`/`:sim-peak-decel-mps2`
+  themselves are driven by `:joint-mass-kg` (and test speed/travel),
+  NOT by the coupon envelope's size -- see that fn's docstring."
   [part-lot]
-  (select-keys (run-pull-test (:joint-mass-kg part-lot))
+  (select-keys (run-pull-test part-lot)
                [:sim-proof-load-force :sim-peak-decel-mps2 :ticks :dt
                 :test-speed-mps :travel-to-failure-m]))
 
