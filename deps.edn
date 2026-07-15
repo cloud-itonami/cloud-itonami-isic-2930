@@ -42,19 +42,29 @@
         io.github.kotoba-lang/org-iso-10303
         {:git/url "https://github.com/kotoba-lang/org-iso-10303.git"
          :sha "a1de3b075bcdcfbfb75c781eb88e3d07195831cf"}
-        ;; Cross-actor supply-chain-linkage contract (ADR-2607999950):
-        ;; `autoparts.governor` independently re-verifies an optional
-        ;; `:upstream-pedigree` (a `kotoba.pedigree` record an
-        ;; upstream isic-2410 steel heat issued via `steelworks.
-        ;; export/pedigree-for-heat`) before accepting it as evidence
-        ;; a part-lot's steel feedstock clears this actor's own
-        ;; acceptance floor. A real pinned git-coordinate dep (not
+        ;; Cross-actor supply-chain-linkage contract (ADR-2607999950,
+        ;; extended by ADR-2607999960): `autoparts.governor`
+        ;; independently re-verifies an optional `:upstream-pedigree`
+        ;; (a `kotoba.pedigree` record an upstream isic-2410 steel
+        ;; heat issued via `steelworks.export/pedigree-for-heat`)
+        ;; before accepting it as evidence a part-lot's steel
+        ;; feedstock clears this actor's own acceptance floor, AND
+        ;; `autoparts.export/pedigree-for-part-lot` now issues THIS
+        ;; actor's own pedigree for a downstream `cloud-itonami-
+        ;; isic-2910` to independently re-verify -- see that fn's
+        ;; docstring for the genuine 2-hop chaining this pin bump
+        ;; unlocks (`kotoba.pedigree/claim`'s `:upstream` option,
+        ;; ADR-2607999960). A real pinned git-coordinate dep (not
         ;; :local/root), same reasoning as physics-2d/org-iso-10303
-        ;; above -- SAME SHA `cloud-itonami-isic-2410`'s own deps.edn
-        ;; pins.
+        ;; above. Bumped past `cloud-itonami-isic-2410`'s own
+        ;; (older) pedigree pin deliberately -- this actor's OWN
+        ;; export needs the `:upstream` chaining support that pin
+        ;; adds; isic-2410 has no need for it (it only ISSUES
+        ;; single-hop pedigrees, never embeds an upstream one) so its
+        ;; pin is left alone, out of this ADR's scope.
         io.github.kotoba-lang/pedigree
         {:git/url "https://github.com/kotoba-lang/pedigree.git"
-         :sha "84808e26a767791d6d3de06357ba8410bd05eaca"}}
+         :sha "f85784211422a651fea26f448f601abfba2e7d61"}}
  :aliases
  {;; offline workspace dev -- pin transitive langchain to local checkout
   :dev {:override-deps
