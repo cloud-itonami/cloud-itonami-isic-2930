@@ -109,7 +109,7 @@ auto-parts plant's own acts.
 | `:ppap-evidence/verify` | per-jurisdiction PPAP evidence checklist (always human) |
 | `:process-capability/screen` | process-capability defect screen (HARD hold if unresolved) |
 | `:robotics/simulate-inspection-cell` | robot CMM/torque/weld-inspection verification mission (always human; required on file before shipment) |
-| `:actuation/ship-part-lot` | draft part-lot-shipment record (always human; HARD hold if robotics-sim missing, independently out-of-tolerance, or DPPM out of range) |
+| `:actuation/ship-part-lot` | draft part-lot-shipment record (always human; HARD hold if robotics-sim missing, independently out-of-tolerance, DPPM out of range, or an attached upstream steel pedigree fails independent re-verification) |
 | `:actuation/issue-ppap-certificate` | draft PPAP-certificate record (always human) |
 
 ## Social / regulatory hand-off
@@ -154,3 +154,23 @@ clojure -M:dev:export
 ```
 
 Writes CSV files under `out/audit-package/` (or the given directory).
+
+## Cross-actor supply-chain linkage (ADR-2607999950)
+
+A part-lot may carry an OPTIONAL `:upstream-pedigree` -- a
+[`kotoba-lang/pedigree`](https://github.com/kotoba-lang/pedigree)
+record an upstream `cloud-itonami-isic-2410` steel heat issued via
+`steelworks.export/pedigree-for-heat`, attached via the existing
+`:part-lot/intake`+`:patch` mechanism (no new op). When present, the
+Auto-Parts Governor independently re-verifies it -- never trusts the
+upstream actor's claim at face value: (a) `kotoba.pedigree/valid?` on
+its own shape, and (b) its `:tensile-test-load-n` claim clears this
+actor's own disclosed acceptance floor (`autoparts.governor/min-
+upstream-tensile-load-n`, 4200 N -- a 20% margin above this actor's
+own downstream joint proof-load floor, disclosed reasoning in that
+constant's docstring). Absent `:upstream-pedigree` is a no-op --
+every part-lot that predates this ADR ships exactly as before.
+
+Still no live network call between actors: the pedigree moves as a
+plain EDN function argument (test/demo/orchestration-script-level
+wiring), never an HTTP fetch.

@@ -32,7 +32,15 @@
   what jurisdictional basis, approved by whom' is always a query over
   an immutable log -- the audit trail a community trusting an auto-
   parts manufacturer needs, and the evidence a manufacturer needs if
-  a shipment or PPAP-certificate decision is later disputed."
+  a shipment or PPAP-certificate decision is later disputed.
+
+  `:upstream-pedigree` (ADR-2607999950) is an OPTIONAL part-lot field
+  -- a `kotoba.pedigree` record an upstream `cloud-itonami-isic-2410`
+  steel heat issued, attached via the SAME general-purpose `:part-
+  lot/intake`+`:patch` mechanism every other part-lot field already
+  uses (no new op/effect needed). Absent on every part-lot that
+  predates this ADR; `autoparts.governor`'s new check treats its
+  absence as a no-op, so this is purely additive on both backends."
   (:require #?(:clj  [clojure.edn :as edn]
                :cljs [cljs.reader :as edn])
             [autoparts.registry :as registry]
@@ -243,6 +251,7 @@
 (defn- part-lot->tx [{:keys [id part-lot-name dppm-actual dppm-min dppm-max
                               joint-mass-kg sim-proof-load-force sim-peak-decel-mps2
                               process-capability-defect-unresolved? robotics-sim-verified? robotics-sim-record
+                              upstream-pedigree
                               part-lot-shipped? ppap-certified?
                               jurisdiction status shipment-number certificate-number]}]
   (cond-> {:part-lot/id id}
@@ -256,6 +265,7 @@
     (some? process-capability-defect-unresolved?) (assoc :part-lot/process-capability-defect-unresolved? process-capability-defect-unresolved?)
     (some? robotics-sim-verified?)               (assoc :part-lot/robotics-sim-verified? robotics-sim-verified?)
     (some? robotics-sim-record)                  (assoc :part-lot/robotics-sim-record (enc robotics-sim-record))
+    (some? upstream-pedigree)                    (assoc :part-lot/upstream-pedigree (enc upstream-pedigree))
     (some? part-lot-shipped?)                   (assoc :part-lot/part-lot-shipped? part-lot-shipped?)
     (some? ppap-certified?)                     (assoc :part-lot/ppap-certified? ppap-certified?)
     jurisdiction                                (assoc :part-lot/jurisdiction jurisdiction)
@@ -268,6 +278,7 @@
    :part-lot/dppm-min :part-lot/dppm-max
    :part-lot/joint-mass-kg :part-lot/sim-proof-load-force :part-lot/sim-peak-decel-mps2
    :part-lot/process-capability-defect-unresolved? :part-lot/robotics-sim-verified? :part-lot/robotics-sim-record
+   :part-lot/upstream-pedigree
    :part-lot/part-lot-shipped? :part-lot/ppap-certified?
    :part-lot/jurisdiction :part-lot/status :part-lot/shipment-number :part-lot/certificate-number])
 
@@ -283,6 +294,7 @@
      :process-capability-defect-unresolved? (boolean (:part-lot/process-capability-defect-unresolved? m))
      :robotics-sim-verified? (boolean (:part-lot/robotics-sim-verified? m))
      :robotics-sim-record (dec* (:part-lot/robotics-sim-record m))
+     :upstream-pedigree (dec* (:part-lot/upstream-pedigree m))
      :part-lot-shipped? (boolean (:part-lot/part-lot-shipped? m))
      :ppap-certified? (boolean (:part-lot/ppap-certified? m))
      :jurisdiction (:part-lot/jurisdiction m) :status (:part-lot/status m)
