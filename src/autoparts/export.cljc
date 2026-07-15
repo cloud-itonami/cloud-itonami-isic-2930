@@ -9,8 +9,17 @@
   the package body.
 
   This is the honest delivery of the industry-stack `:export?` contract
-  (robotics / audit-ledger capabilities) for ISIC 2930."
+  (robotics / audit-ledger capabilities) for ISIC 2930.
+
+  `pedigree-for-part-lot` (ADR-2607999960, the second applied link of
+  the ADR-2607999950 cross-actor supply-chain-linkage pattern: THIS
+  actor issuing its OWN pedigree, for `cloud-itonami-isic-2910` to
+  independently re-verify) is a SEPARATE kind of export, same shape
+  and same discipline as `steelworks.export/pedigree-for-heat`: a
+  pure data transform over data already on file, never a live
+  network call and never an invented claim."
   (:require [clojure.string :as str]
+            [kotoba.pedigree :as pedigree]
             [autoparts.store :as store]))
 
 (defn- csv-escape [v]
@@ -123,3 +132,63 @@
     (doseq [[name body] bundle]
       (spit (java.io.File. d (str name)) body))
     (.getAbsolutePath d))))
+
+;; ---------------------------------------------------------------------------
+;; Cross-actor supply-chain-linkage export (ADR-2607999960)
+;; ---------------------------------------------------------------------------
+
+(defn pedigree-for-part-lot
+  "Builds a `kotoba.pedigree` record (ADR-2607999960's second applied
+  link of the ADR-2607999950 cross-actor supply-chain-linkage pattern,
+  isic-2930 -> isic-2910) for `part-lot`, a part-lot record that
+  ALREADY carries its own real, already-simulated weld-joint/fastener
+  proof-load pull-test telemetry on file (`:sim-proof-load-force`,
+  from `autoparts.robotics/pull-test-telemetry-for` -- ADR-2607152000's
+  real `physics-2d` time-stepped joint proof-load pull-test
+  simulation). This fn does NOT run that simulation itself -- it only
+  packages a reading already on the part-lot map, mirroring how
+  `steelworks.export/pedigree-for-heat` only ever materializes a
+  package body over data already on file, never computes new
+  evidence.
+
+  `issued-at` (an ISO date string) is a caller-supplied argument, not
+  a wall-clock read -- this fn stays pure/deterministic, the same
+  discipline `pedigree-for-heat` already establishes.
+
+  `:pedigree/claims` reports `:proof-load-force-n` -- a FORCE reading
+  in Newtons, honestly named after `autoparts.robotics`'s own
+  `:sim-proof-load-force` field (see that ns's docstring: force =
+  mass x deceleration, a real load-cell-equivalent reading, not a
+  stress figure this actor has no cross-sectional-area/stress model
+  to derive). `:pedigree/evidence-basis` cites the real simulation
+  function that derived the reading, never a self-reported checklist
+  string.
+
+  Genuine 2-hop chaining (ADR-2607999960): when `part-lot` itself
+  already carries an `:upstream-pedigree` (a `kotoba.pedigree` record
+  an upstream `cloud-itonami-isic-2410` steel heat issued via
+  `steelworks.export/pedigree-for-heat`, and this actor's OWN governor
+  independently re-verified before ever letting the part-lot ship --
+  see `autoparts.governor`'s `upstream-pedigree-claims-out-of-
+  tolerance-violations`), it is embedded here as `:pedigree/upstream`
+  (`kotoba.pedigree/claim`'s `:upstream` option, ADR-2607999960),
+  producing a genuine two-hop provenance chain (steel heat -> part
+  lot) `cloud-itonami-isic-2910`'s own governor can independently
+  re-verify shape-wise via `kotoba.pedigree/valid?`'s recursive check
+  -- never a bare id the receiver has to go look up, and never a
+  second network fetch. When `part-lot` carries no `:upstream-
+  pedigree`, `:pedigree/upstream` is simply omitted -- a single-hop
+  part-lot pedigree is unaffected by this option's existence.
+
+  Returns nil (never a fabricated pedigree) when `part-lot` carries no
+  real `:sim-proof-load-force` on file -- the SAME disclosed 'missing
+  telemetry != inventable' discipline `autoparts.robotics` ns
+  docstring / `proof-load-out-of-tolerance?` already establish."
+  [{:keys [id sim-proof-load-force upstream-pedigree]} issued-at]
+  (when (and id (number? sim-proof-load-force))
+    (pedigree/claim
+     (str "PEDIGREE-" id) id "cloud-itonami-isic-2930"
+     {:proof-load-force-n sim-proof-load-force}
+     :evidence-basis ["autoparts.robotics/run-pull-test (physics-2d time-stepped rigid-body simulation, weld-joint/fastener proof-load pull test -- see ns docstring)"]
+     :issued-at issued-at
+     :upstream upstream-pedigree)))
