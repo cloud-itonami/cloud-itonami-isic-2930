@@ -11,13 +11,14 @@
   manufacturer analog of `cloud-itonami-isic-6512`'s
   CasualtyGovernor.
 
-  Seven checks, in priority order, ALL HARD violations: a human approver
+  Eight checks, in priority order, ALL HARD violations: a human approver
   CANNOT override them (you don't get to approve your way past a
   fabricated PPAP spec-basis, incomplete evidence, a robot CMM/torque/
   weld-inspection simulation that never ran or that independently
   re-checks out-of-tolerance, an out-of-spec part-lot, an unresolved
-  process-capability defect, or a double shipment/certificate-
-  issuance). The confidence/actuation gate is SOFT: it asks a human to
+  process-capability defect, an upstream steel pedigree whose shape or
+  claims fail independent re-verification, or a double shipment/
+  certificate-issuance). The confidence/actuation gate is SOFT: it asks a human to
   look (low confidence / actuation), and the human may approve -- but
   see `autoparts.phase`: for `:stake :actuation/ship-part-lot`/
   `:actuation/issue-ppap-certificate` (a real safety-critical act) NO
@@ -103,7 +104,36 @@
                                        op against an unscreened part-
                                        lot -- see this ns's own test
                                        suite.
-    6. Confidence floor / actuation
+    6. Upstream pedigree claims
+       out of tolerance              -- ADR-2607999950's cross-actor
+                                       supply-chain-linkage pilot: for
+                                       `:actuation/ship-part-lot`,
+                                       when the part-lot carries an
+                                       OPTIONAL `:upstream-pedigree`
+                                       (a `kotoba.pedigree` record an
+                                       upstream `cloud-itonami-
+                                       isic-2410` steel heat issued
+                                       via `steelworks.export/
+                                       pedigree-for-heat`),
+                                       INDEPENDENTLY re-verify it --
+                                       never trust the upstream
+                                       actor's claim at face value:
+                                       (a) `kotoba.pedigree/valid?`
+                                       on its own shape, and (b) its
+                                       `:tensile-test-load-n` claim
+                                       actually clears THIS actor's
+                                       own disclosed acceptance floor
+                                       for upstream steel feedstock
+                                       (`min-upstream-tensile-load-
+                                       n`, below). When `:upstream-
+                                       pedigree` is ABSENT this check
+                                       is a NO-OP -- existing
+                                       proposals with no upstream
+                                       linkage continue to ship
+                                       exactly as before this ADR
+                                       (additive, never a breaking
+                                       change).
+    7. Confidence floor / actuation
        gate                          -- LLM confidence below threshold,
                                        OR the op is `:actuation/ship-
                                        part-lot`/`:actuation/issue-
@@ -123,9 +153,32 @@
   (:require [autoparts.facts :as facts]
             [autoparts.registry :as registry]
             [autoparts.robotics :as robotics]
-            [autoparts.store :as store]))
+            [autoparts.store :as store]
+            [kotoba.pedigree :as pedigree]))
 
 (def confidence-floor 0.6)
+
+(def ^:const min-upstream-tensile-load-n
+  "Real, disclosed minimum acceptable upstream raw-steel-heat tensile-
+  test load (N -- a `kotoba.pedigree` `:tensile-test-load-n` claim
+  from a `cloud-itonami-isic-2410`-issued pedigree, ADR-2607999950)
+  this actor requires before accepting a part-lot's steel feedstock
+  as suitable for a structural weld/fastener joint.
+
+  Set at a 20% margin ABOVE this actor's own downstream joint
+  proof-load floor (`autoparts.robotics/min-proof-load-n`, 3500 N) --
+  a disclosed, real engineering prior: welding/fastening a joint
+  locally reduces the base material's own effective tensile capacity
+  (heat-affected-zone softening for a weld, thread/hole stress
+  concentration for a fastener), commonly cited in the low tens of
+  percent for structural-steel spot-welds, so raw feedstock arriving
+  at only the SAME floor the finished joint must clear would leave no
+  margin at all once joined. 3500 * 1.2 = 4200 N -- a newly-defined
+  bound for THIS cross-actor acceptance gate, not a literal
+  transcription of one specific named standard's number (the same
+  disclosed-prior allowance `autoparts.robotics/min-proof-load-n`
+  itself already uses)."
+  4200.0)
 
 (def high-stakes
   "Stakes grave enough to always require a human, even when clean.
@@ -220,6 +273,43 @@
       [{:rule :process-capability-defect-unresolved
         :detail "未解決の工程能力欠陥がある状態でのPPAP証明書発行提案は進められない"}])))
 
+(defn- upstream-pedigree-claims-out-of-tolerance-violations
+  "ADR-2607999950's cross-actor supply-chain-linkage pilot. For
+  `:actuation/ship-part-lot`: when the part-lot carries an OPTIONAL
+  `:upstream-pedigree` (a `kotoba.pedigree` record an upstream
+  `cloud-itonami-isic-2410` steel heat issued via `steelworks.export/
+  pedigree-for-heat` and a test/demo/orchestration script attached to
+  this part-lot as plain EDN data -- never a live network call),
+  INDEPENDENTLY re-verify it, never trusting the upstream actor's
+  claim at face value: (a) the pedigree's own shape
+  (`kotoba.pedigree/valid?`) -- a malformed/incomplete pedigree is
+  never accepted, and (b) its `:tensile-test-load-n` claim actually
+  clears THIS actor's own disclosed acceptance floor for upstream
+  steel feedstock (`min-upstream-tensile-load-n`) -- the SAME 'ground
+  truth, not self-report' discipline `robotics-simulation-violations`/
+  `part-lot-dppm-out-of-range-violations` above already apply WITHIN
+  this actor, now extended ACROSS actors.
+
+  When `:upstream-pedigree` is ABSENT this check is a NO-OP --
+  existing proposals with no upstream linkage continue to ship
+  exactly as before this ADR (additive, never a breaking change)."
+  [{:keys [op subject]} st]
+  (when (= op :actuation/ship-part-lot)
+    (let [a (store/part-lot st subject)
+          p (:upstream-pedigree a)]
+      (when (some? p)
+        (cond
+          (not (pedigree/valid? p))
+          [{:rule :upstream-pedigree-invalid-shape
+            :detail (str subject " のupstream pedigreeがkotoba.pedigreeの形状検証に失敗")}]
+
+          (let [v (pedigree/claim-value p :tensile-test-load-n)]
+            (or (not (number? v)) (< v min-upstream-tensile-load-n)))
+          [{:rule :upstream-pedigree-claims-out-of-tolerance
+            :detail (str subject " のupstream pedigree(" (:pedigree/id p)
+                        ")の実測引張荷重(" (pedigree/claim-value p :tensile-test-load-n)
+                        "N)が受入基準(" min-upstream-tensile-load-n "N)を下回る")}])))))
+
 (defn- already-shipped-violations
   "For `:actuation/ship-part-lot`, refuses to ship a part-lot action
   for the SAME part-lot twice, off a dedicated `:part-lot-shipped?`
@@ -251,6 +341,7 @@
                            (robotics-simulation-violations request st)
                            (part-lot-dppm-out-of-range-violations request st)
                            (process-capability-defect-unresolved-violations request proposal st)
+                           (upstream-pedigree-claims-out-of-tolerance-violations request st)
                            (already-shipped-violations request st)
                            (already-certified-violations request st)))
         conf (:confidence proposal 0.0)
