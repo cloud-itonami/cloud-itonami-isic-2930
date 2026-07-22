@@ -15,7 +15,23 @@
   Coverage is reported HONESTLY: a jurisdiction not in this table has
   NO spec-basis. Seed values cite official PPAP/IATF-16949-adjacent
   standards bodies; this is a starting catalog, not a survey of every
-  market or every OEM's own supplement.")
+  market or every OEM's own supplement.
+
+  KOR (South Korea) is the 5th jurisdiction added to this catalog.
+  Unlike DEU/GBR/JPN/USA, South Korea has NO national IATF
+  sponsor/oversight association at all -- confirmed absent from
+  IATF's own founding-sponsor list (VDA/AIAG/AVSQ/FIEV/SMMT only,
+  per en.wikipedia.org/wiki/IATF_16949 and
+  iatfglobaloversight.org's own National Industry Associations
+  listing) and from Japan's own JAPIA/JASO-style national
+  quality-assurance-guideline pattern (no Korean equivalent
+  publication was found). This catalog reports that gap honestly in
+  the KOR entry's own field values rather than inventing a Korean
+  JAPIA-equivalent that does not exist: KOR cites the concrete
+  in-market IATF-16949 certification body actually found
+  (한국품질재단/Korea Foundation for Quality, KFQ) and the domestic
+  OEM (Hyundai/Kia) supplier requirement driving adoption, instead of
+  a national industry-association steward.")
 
 (def catalog
   {"USA" {:name "United States"
@@ -53,7 +69,29 @@
           :required-evidence ["工程能力調査報告書 (initial-process-studies-cpk-report)"
                               "測定システム分析報告書 (measurement-system-analysis-report)"
                               "部品submission保証書 (part-submission-warrant/PSW)"
-                              "検査基準書 (control-plan)"]}})
+                              "検査基準書 (control-plan)"]}
+   ;; South Korea (KOR): honest gap-disclosure entry -- see the ns
+   ;; docstring above for why this entry's shape differs in CONTENT
+   ;; (not in keys) from DEU/GBR/JPN/USA. No Korean JAPIA/VDA-QMC/
+   ;; SMMT/AIAG equivalent was found to exist (verified against
+   ;; en.wikipedia.org/wiki/IATF_16949 and
+   ;; iatfglobaloversight.org/certification-bodies/, both fetched and
+   ;; read directly; neither lists a Korean sponsor). KAICA (한국자동차
+   ;; 산업협동조합, https://www.kaica.or.kr/) and KAMA (한국자동차제조협회,
+   ;; https://www.kama.or.kr/) were also checked directly and neither
+   ;; publishes a PPAP/IATF-16949 guideline. required-evidence below
+   ;; therefore follows the generic AIAG PPAP submission-levels list
+   ;; (same as GBR, which also has no own-language national manual)
+   ;; rather than a fabricated Korean-language document set.
+   "KOR" {:name "South Korea"
+          :owner-authority "No Korea-based national IATF sponsor/oversight association exists (confirmed absent from IATF's founding-sponsor list -- VDA/AIAG/AVSQ/FIEV/SMMT only -- and from iatfglobaloversight.org's own listing, unlike DEU/GBR/JPN/USA's VDA QMC/SMMT/AIAG or JPN's JAPIA/JASO). IATF 16949 adoption in Korea is driven directly by domestic OEM supplier requirements (Hyundai/Kia) and delivered through IATF-16949-certifying bodies operating in-market, e.g. 한국품질재단 (Korea Foundation for Quality, KFQ)"
+          :legal-basis "IATF 16949:2016 (reference; industry quality-management standard, not a government statute -- Korea has no VDA-2/JAPIA-guideline analog either). KFQ's own IATF 16949 service page states it is a 필수 인증 요건 (required certification) for global OEMs/Tier-1s and all auto-parts/materials suppliers, and names 현대차 (Hyundai) among the OEMs requiring it"
+          :national-spec "No Korea-specific PPAP-equivalent manual confirmed (no VDA-2/JAPIA-guideline analog found for Korea); Korean suppliers follow the same AIAG PPAP submission levels 1-5 as USA. KFQ's own page glosses PPAP as 양산부품 승인절차 (production-part approval procedure) and MSA as 측정시스템분석 (measurement system analysis)"
+          :provenance "https://www.kfq.or.kr/standard-iatf-16949"
+          :required-evidence ["Initial process studies (Cpk/Ppk) report"
+                              "Measurement System Analysis (MSA) report"
+                              "Part Submission Warrant (PSW)"
+                              "Control plan"]}})
 
 (defn spec-basis [iso3] (get catalog iso3))
 
