@@ -41,11 +41,10 @@
   uses (no new op/effect needed). Absent on every part-lot that
   predates this ADR; `autoparts.governor`'s new check treats its
   absence as a no-op, so this is purely additive on both backends."
-  (:require #?(:clj  [clojure.edn :as edn]
-               :cljs [cljs.reader :as edn])
-            [autoparts.registry :as registry]
+  (:require [autoparts.registry :as registry]
             [autoparts.robotics :as robotics]
-            [langchain.db :as d]))
+            [langchain.db :as d]
+            [langchain-store.core :as ls]))
 
 (defprotocol Store
   (part-lot [s id])
@@ -245,9 +244,6 @@
    :shipment-sequence/jurisdiction    {:db/unique :db.unique/identity}
    :certificate-sequence/jurisdiction {:db/unique :db.unique/identity}})
 
-(defn- enc [v] (pr-str v))
-(defn- dec* [s] (when s (edn/read-string s)))
-
 (defn- part-lot->tx [{:keys [id part-lot-name dppm-actual dppm-min dppm-max
                               joint-mass-kg sim-proof-load-force sim-peak-decel-mps2
                               process-capability-defect-unresolved? robotics-sim-verified? robotics-sim-record
@@ -264,8 +260,8 @@
     (some? sim-peak-decel-mps2)                  (assoc :part-lot/sim-peak-decel-mps2 sim-peak-decel-mps2)
     (some? process-capability-defect-unresolved?) (assoc :part-lot/process-capability-defect-unresolved? process-capability-defect-unresolved?)
     (some? robotics-sim-verified?)               (assoc :part-lot/robotics-sim-verified? robotics-sim-verified?)
-    (some? robotics-sim-record)                  (assoc :part-lot/robotics-sim-record (enc robotics-sim-record))
-    (some? upstream-pedigree)                    (assoc :part-lot/upstream-pedigree (enc upstream-pedigree))
+    (some? robotics-sim-record)                  (assoc :part-lot/robotics-sim-record (ls/enc robotics-sim-record))
+    (some? upstream-pedigree)                    (assoc :part-lot/upstream-pedigree (ls/enc upstream-pedigree))
     (some? part-lot-shipped?)                   (assoc :part-lot/part-lot-shipped? part-lot-shipped?)
     (some? ppap-certified?)                     (assoc :part-lot/ppap-certified? ppap-certified?)
     jurisdiction                                (assoc :part-lot/jurisdiction jurisdiction)
@@ -293,8 +289,8 @@
      :sim-peak-decel-mps2 (:part-lot/sim-peak-decel-mps2 m)
      :process-capability-defect-unresolved? (boolean (:part-lot/process-capability-defect-unresolved? m))
      :robotics-sim-verified? (boolean (:part-lot/robotics-sim-verified? m))
-     :robotics-sim-record (dec* (:part-lot/robotics-sim-record m))
-     :upstream-pedigree (dec* (:part-lot/upstream-pedigree m))
+     :robotics-sim-record (ls/dec* (:part-lot/robotics-sim-record m))
+     :upstream-pedigree (ls/dec* (:part-lot/upstream-pedigree m))
      :part-lot-shipped? (boolean (:part-lot/part-lot-shipped? m))
      :ppap-certified? (boolean (:part-lot/ppap-certified? m))
      :jurisdiction (:part-lot/jurisdiction m) :status (:part-lot/status m)
@@ -309,25 +305,25 @@
          (map #(pull->part-lot (d/pull (d/db conn) part-lot-pull [:part-lot/id %])))
          (sort-by :id)))
   (process-capability-screen-of [_ id]
-    (dec* (d/q '[:find ?p . :in $ ?aid
+    (ls/dec* (d/q '[:find ?p . :in $ ?aid
                 :where [?k :process-capability-screen/part-lot-id ?aid] [?k :process-capability-screen/payload ?p]]
               (d/db conn) id)))
   (ppap-verification-of [_ part-lot-id]
-    (dec* (d/q '[:find ?p . :in $ ?aid
+    (ls/dec* (d/q '[:find ?p . :in $ ?aid
                 :where [?a :verification/part-lot-id ?aid] [?a :verification/payload ?p]]
               (d/db conn) part-lot-id)))
   (ledger [_]
     (->> (d/q '[:find ?s ?f :where [?e :ledger/seq ?s] [?e :ledger/fact ?f]] (d/db conn))
          (sort-by first)
-         (mapv (comp dec* second))))
+         (mapv (comp ls/dec* second))))
   (shipment-history [_]
     (->> (d/q '[:find ?s ?r :where [?e :shipment/seq ?s] [?e :shipment/record ?r]] (d/db conn))
          (sort-by first)
-         (mapv (comp dec* second))))
+         (mapv (comp ls/dec* second))))
   (certificate-history [_]
     (->> (d/q '[:find ?s ?r :where [?e :certificate/seq ?s] [?e :certificate/record ?r]] (d/db conn))
          (sort-by first)
-         (mapv (comp dec* second))))
+         (mapv (comp ls/dec* second))))
   (next-shipment-sequence [_ jurisdiction]
     (or (d/q '[:find ?n . :in $ ?j
               :where [?e :shipment-sequence/jurisdiction ?j] [?e :shipment-sequence/next ?n]]
@@ -348,10 +344,10 @@
       (d/transact! conn [(part-lot->tx value)])
 
       :ppap-verification/set
-      (d/transact! conn [{:verification/part-lot-id (first path) :verification/payload (enc payload)}])
+      (d/transact! conn [{:verification/part-lot-id (first path) :verification/payload (ls/enc payload)}])
 
       :process-capability-screen/set
-      (d/transact! conn [{:process-capability-screen/part-lot-id (first path) :process-capability-screen/payload (enc payload)}])
+      (d/transact! conn [{:process-capability-screen/part-lot-id (first path) :process-capability-screen/payload (ls/enc payload)}])
 
       :part-lot/mark-shipped
       (let [part-lot-id (first path)
@@ -361,7 +357,7 @@
         (d/transact! conn
                      [(part-lot->tx (assoc part-lot-patch :id part-lot-id))
                       {:shipment-sequence/jurisdiction jurisdiction :shipment-sequence/next next-n}
-                      {:shipment/seq (count (shipment-history s)) :shipment/record (enc (get result "record"))}])
+                      {:shipment/seq (count (shipment-history s)) :shipment/record (ls/enc (get result "record"))}])
         result)
 
       :part-lot/mark-certified
@@ -372,12 +368,12 @@
         (d/transact! conn
                      [(part-lot->tx (assoc part-lot-patch :id part-lot-id))
                       {:certificate-sequence/jurisdiction jurisdiction :certificate-sequence/next next-n}
-                      {:certificate/seq (count (certificate-history s)) :certificate/record (enc (get result "record"))}])
+                      {:certificate/seq (count (certificate-history s)) :certificate/record (ls/enc (get result "record"))}])
         result)
       nil)
     s)
   (append-ledger! [s fact]
-    (d/transact! conn [{:ledger/seq (count (ledger s)) :ledger/fact (enc fact)}])
+    (d/transact! conn [{:ledger/seq (count (ledger s)) :ledger/fact (ls/enc fact)}])
     fact)
   (with-part-lots [s part-lots]
     (when (seq part-lots) (d/transact! conn (mapv part-lot->tx (vals part-lots)))) s))

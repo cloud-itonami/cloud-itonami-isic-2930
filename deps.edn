@@ -8,6 +8,8 @@
  ;; should override them with git coordinates.
  :deps {io.github.kotoba-lang/langgraph
         {:local/root "../../kotoba-lang/langgraph"}
+        io.github.kotoba-lang/langchain-store
+        {:local/root "../../kotoba-lang/langchain-store"}
         io.github.kotoba-lang/robotics
         {:local/root "../../kotoba-lang/robotics"}
         ;; REAL engineering-simulation dependency (ADR-2607152000, extending
