@@ -6,7 +6,17 @@
  ;; repo is standalone (forkable outside the workspace); the :local/root
  ;; paths only resolve inside the monorepo checkout — a standalone fork
  ;; should override them with git coordinates.
- :deps {io.github.kotoba-lang/langgraph
+ :deps {;; Workspace BASE design system (デジタル庁デザインシステム / DADS --
+        ;; com-junkawasaki/root CLAUDE.md "UI/UX 標準"). Consumed as a
+        ;; PINNED git coordinate rather than :local/root, the same shape
+        ;; every sibling `render_html.clj` consumer uses, so the operator
+        ;; console still builds in a standalone fork. ONLY
+        ;; `autoparts.render-html` (JVM, build-time) requires it -- the
+        ;; actor itself has no UI dependency at all.
+        io.github.kotoba-lang/jp-go-digital-design-system
+        {:git/url "https://github.com/kotoba-lang/jp-go-digital-design-system"
+         :git/sha "83db99546eabc53613ae826ea41d1533a3c574af"}
+        io.github.kotoba-lang/langgraph
         {:local/root "../../kotoba-lang/langgraph"}
         io.github.kotoba-lang/langchain-store
         {:local/root "../../kotoba-lang/langchain-store"}
@@ -74,6 +84,12 @@
          {:local/root "../../kotoba-lang/langchain"}}}
   ;; clojure -M:dev:run  -> drive the demo through one OperationActor
   :run {:main-opts ["-m" "autoparts.sim"]}
+  ;; clojure -M:dev:render-html [out-file] -> regenerate
+  ;; docs/samples/operator-console.html by actually RUNNING the actor
+  ;; (flagship checklist item 2). Every id/number/hold on that page is
+  ;; real `autoparts.operation` -> `autoparts.governor` ->
+  ;; `autoparts.store` output, never a hand-typed string.
+  :render-html {:main-opts ["-m" "autoparts.render-html"]}
   :export {:main-opts ["-m" "autoparts.export-run"]}
   :test {:extra-paths ["test"]
          :extra-deps {io.github.cognitect-labs/test-runner
