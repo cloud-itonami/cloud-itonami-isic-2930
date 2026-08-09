@@ -1,0 +1,414 @@
+(ns autoparts.render-html
+  "Build-time HTML renderer for `docs/samples/operator-console.html`.
+
+  Closes flagship checklist item 2 for this repo: the page that lived at
+  that path before was a HAND-WRITTEN HTML file whose part-lot ids,
+  DPPM figures and hold reasons were typed by a human and could drift
+  from the actor without anything noticing. This namespace replaces it
+  with a generator that actually RUNS the real actor stack --
+  `autoparts.operation` (the langgraph-clj StateGraph) ->
+  `autoparts.governor` (the independent censor) -> `autoparts.store`
+  (the SSoT + append-only ledger) -- and renders whatever that run
+  produced.
+
+  EVERY id, number, status, hold rule and hold detail on the generated
+  page is real actor output read back out of the store after the run:
+
+    - part-lot rows come from `autoparts.store/all-part-lots`, and their
+      DPPM / proof-load verdicts are recomputed HERE by the same
+      ground-truth predicates the governor itself uses
+      (`autoparts.registry/part-lot-dppm-out-of-range?`,
+      `autoparts.robotics/simulation-out-of-tolerance?`) -- never a
+      copied-down verdict;
+    - the HARD-hold table and the audit ledger come from
+      `autoparts.store/ledger`, i.e. facts `autoparts.governor/hold-fact`
+      and `autoparts.operation`'s commit node actually wrote;
+    - the shipment / PPAP-certificate reference numbers come from
+      `autoparts.store/shipment-history` / `certificate-history`, i.e.
+      drafts `autoparts.registry` actually constructed;
+    - the hand-off counts come from `autoparts.export/audit-package`.
+
+  The ONE hand-described block is the `action-gate-rows` table, which
+  documents this actor's fixed op contract (`autoparts.phase` /
+  `autoparts.governor`) rather than this run's telemetry; it is marked
+  as such below.
+
+  DETERMINISTIC: no timestamp, no randomness, no wall-clock read
+  anywhere in the page content -- two consecutive runs against the same
+  seed are byte-identical (verify with `diff`). This matters because
+  the page is committed: a nondeterministic generator would produce a
+  diff on every regeneration and the real changes would be invisible.
+
+  Styling is the workspace BASE design system, jp-go-dds (デジタル庁
+  デザインシステム), via `jp-go-dds.skin/dds+skin` -- the vendored DADS
+  CSS plus the compatibility skin that restyles this plain semantic
+  markup. No new token vocabulary is introduced here.
+
+  Usage: `clojure -M:dev:render-html [out-file]`
+  (default `docs/samples/operator-console.html`)."
+  (:require [jp-go-dds.skin]
+            [clojure.string :as str]
+            [autoparts.export :as export]
+            [autoparts.operation :as op]
+            [autoparts.registry :as registry]
+            [autoparts.robotics :as robotics]
+            [autoparts.store :as store]
+            [langgraph.graph :as g]))
+
+(def ^:private operator
+  "The human operator identity injected as the run context -- the same
+  quality-engineer role `autoparts.sim` uses, at phase 3 (supervised
+  auto), which is the ONLY phase where anything can auto-commit at all
+  and therefore the phase that exercises the most gates."
+  {:actor-id "op-1" :actor-role :quality-engineer :phase 3})
+
+(defn- exec!
+  "One real actor run. `g/run*` is langgraph-clj's own executor -- this
+  file never reimplements the graph."
+  [actor tid request]
+  (g/run* actor {:request request :context operator} {:thread-id tid}))
+
+(defn- approve!
+  "Resumes a run parked at `:request-approval` by
+  `interrupt-before` -- the real human-in-the-loop seam."
+  [actor tid]
+  (g/run* actor {:approval {:status :approved :by "op-1"}}
+          {:thread-id tid :resume? true}))
+
+(defn run-demo!
+  "Seeds a fresh `autoparts.store/MemStore`, builds the REAL
+  OperationActor (`autoparts.operation/build`) and drives a scenario
+  adapted from this repo's own `autoparts.sim` demo driver
+  (`clojure -M:dev:run`), which was executed and its ledger read BEFORE
+  this file was written to confirm the subject ids match
+  `autoparts.store/demo-data` (`lot-1`..`lot-5` -- they do; every id
+  below is a real seeded part-lot).
+
+  The scenario deliberately covers both halves of the contract:
+
+  ONE FULL CLEAN LIFECYCLE -- lot-1 (JPN, DPPM 45 within [0,300], no
+  unresolved process-capability defect) walks intake (auto-commits:
+  phase 3 lists `:part-lot/intake` in its `:auto` set) -> PPAP evidence
+  verification -> process-capability screening -> the robot CMM/torque/
+  weld-inspection mission (all three phase-gated to human approval) ->
+  `:actuation/ship-part-lot` -> `:actuation/issue-ppap-certificate`
+  (both ALWAYS escalate at every phase, approved by the operator),
+  producing real `JPN-SHP-*` / `JPN-PPAP-*` registry drafts.
+
+  SEVEN HARD GOVERNOR HOLDS that never reach a human -- these are the
+  point of the page:
+
+    :evidence-incomplete + :robotics-simulation-missing
+        lot-1 shipment attempted before ANY PPAP evidence verification
+        or robot inspection mission had run.
+    :no-spec-basis
+        lot-2's jurisdiction (ATL) has no entry in `autoparts.facts`,
+        so the advisor cites nothing -- requirements are never invented.
+    :part-lot-dppm-out-of-range
+        lot-3 ships clean on paper (evidence verified, robot mission
+        passed) but its own measured DPPM (850) is independently
+        recomputed against its own quality-agreement bounds [0,300].
+    :robotics-simulation-out-of-tolerance
+        lot-5 was seeded `:robotics-sim-verified? true` (\"already on
+        file\"), yet the independent recheck of its REAL physics-2d
+        proof-load pull-test telemetry falls under the floor.
+    :process-capability-defect-unresolved
+        lot-4's screening finds an unresolved defect and holds on its
+        OWN finding.
+    :already-shipped / :already-certified
+        lot-1 re-run: double-actuation guards off dedicated booleans.
+
+  NOT exercised, honestly: the governor's eighth HARD check,
+  `:upstream-pedigree-*`, needs a `kotoba.pedigree` record issued by an
+  upstream `cloud-itonami-isic-2410` steel heat. No seeded part-lot
+  carries one (it is an optional field), and fabricating one here would
+  violate the no-invented-data rule this file exists to enforce -- that
+  path is covered by `test-cross-repo/` against the real sibling actor
+  instead.
+
+  Returns the store. Nothing here writes HTML; `render` below only
+  reads the store back."
+  []
+  (let [db (store/seed-db)
+        actor (op/build db)]
+    ;; --- lot-1: the full clean lifecycle -------------------------------
+    (exec! actor "lot1-intake"
+           {:op :part-lot/intake :subject "lot-1"
+            :patch {:id "lot-1" :part-lot-name "Meridian Brake Pad Lot BP-2044"}})
+
+    ;; HARD hold: shipping before any evidence/robot mission exists.
+    (exec! actor "lot1-ship-premature" {:op :actuation/ship-part-lot :subject "lot-1"})
+
+    (exec! actor "lot1-verify" {:op :ppap-evidence/verify :subject "lot-1"})
+    (approve! actor "lot1-verify")
+
+    (exec! actor "lot1-screen" {:op :process-capability/screen :subject "lot-1"})
+    (approve! actor "lot1-screen")
+
+    (exec! actor "lot1-robotics" {:op :robotics/simulate-inspection-cell :subject "lot-1"})
+    (approve! actor "lot1-robotics")
+
+    (exec! actor "lot1-ship" {:op :actuation/ship-part-lot :subject "lot-1"})
+    (approve! actor "lot1-ship")
+
+    (exec! actor "lot1-ppap" {:op :actuation/issue-ppap-certificate :subject "lot-1"})
+    (approve! actor "lot1-ppap")
+
+    ;; --- lot-2: no official spec-basis for its jurisdiction ------------
+    (exec! actor "lot2-verify" {:op :ppap-evidence/verify :subject "lot-2" :no-spec? true})
+
+    ;; --- lot-3: clean on paper, out-of-range DPPM on recompute ---------
+    (exec! actor "lot3-verify" {:op :ppap-evidence/verify :subject "lot-3"})
+    (approve! actor "lot3-verify")
+
+    (exec! actor "lot3-robotics" {:op :robotics/simulate-inspection-cell :subject "lot-3"})
+    (approve! actor "lot3-robotics")
+
+    (exec! actor "lot3-ship" {:op :actuation/ship-part-lot :subject "lot-3"})
+
+    ;; --- lot-5: sim "on file", but the independent recheck disagrees ---
+    (exec! actor "lot5-verify" {:op :ppap-evidence/verify :subject "lot-5"})
+    (approve! actor "lot5-verify")
+
+    (exec! actor "lot5-ship" {:op :actuation/ship-part-lot :subject "lot-5"})
+
+    ;; --- lot-4: the screening op holds on its own finding --------------
+    (exec! actor "lot4-screen" {:op :process-capability/screen :subject "lot-4"})
+
+    ;; --- lot-1 again: double-actuation guards --------------------------
+    (exec! actor "lot1-ship-again" {:op :actuation/ship-part-lot :subject "lot-1"})
+    (exec! actor "lot1-ppap-again" {:op :actuation/issue-ppap-certificate :subject "lot-1"})
+    db))
+
+;; ----------------------------- rendering -----------------------------
+
+(defn- esc
+  "HTML-escapes EVERY interpolated value. Governor hold details and
+  part-lot names are Japanese free text written by the domain code, not
+  constants of this file, so nothing interpolated below is assumed
+  safe."
+  [v]
+  (-> (str v)
+      (str/replace "&" "&amp;")
+      (str/replace "<" "&lt;")
+      (str/replace ">" "&gt;")
+      (str/replace "\"" "&quot;")))
+
+(defn- basis-str [basis]
+  (str/join " / " (map str basis)))
+
+(defn- last-fact-for [ledger part-lot-id]
+  (last (filter #(= (:subject %) part-lot-id) ledger)))
+
+(defn- status-cell [ledger part-lot-id]
+  (let [f (last-fact-for ledger part-lot-id)]
+    (case (:t f)
+      :committed (str "<span class=\"ok\">committed &middot; "
+                      (esc (str (:op f))) "</span>")
+      :governor-hold (str "<span class=\"critical\">HARD hold &middot; "
+                          (esc (basis-str (:basis f))) "</span>")
+      nil "<span class=\"muted\">no activity this run</span>"
+      (str "<span class=\"muted\">" (esc (str (:t f))) "</span>"))))
+
+(defn- dppm-cell
+  "Recomputed HERE by the governor's own ground-truth predicate --
+  `autoparts.registry/part-lot-dppm-out-of-range?` -- against the
+  part-lot's own permanent fields, exactly as
+  `autoparts.governor/part-lot-dppm-out-of-range-violations` does."
+  [{:keys [dppm-actual dppm-min dppm-max] :as part-lot}]
+  (let [bounds (str " [" (esc dppm-min) "," (esc dppm-max) "]")]
+    (if (registry/part-lot-dppm-out-of-range? part-lot)
+      (str "<span class=\"err\">" (esc dppm-actual) " &notin;" bounds "</span>")
+      (str "<span class=\"ok\">" (esc dppm-actual) " &isin;" bounds "</span>"))))
+
+(defn- proof-load-cell
+  "Recomputed HERE by `autoparts.robotics/simulation-out-of-tolerance?`
+  over the part-lot's own REAL physics-2d-simulated pull-test
+  telemetry, exactly as `autoparts.governor/robotics-simulation-
+  violations` does -- the stored `:passed?` verdict is never trusted."
+  [{:keys [sim-proof-load-force] :as part-lot}]
+  (let [reading (str (esc sim-proof-load-force) " N")]
+    (cond
+      (nil? sim-proof-load-force) "<span class=\"muted\">no telemetry</span>"
+      (robotics/simulation-out-of-tolerance? part-lot)
+      (str "<span class=\"err\">" reading " &lt; " (esc robotics/min-proof-load-n)
+           " N floor</span>")
+      :else (str "<span class=\"ok\">" reading "</span>"))))
+
+(defn- lifecycle-cell [{:keys [part-lot-shipped? ppap-certified?
+                               shipment-number certificate-number]}]
+  (cond
+    (and part-lot-shipped? ppap-certified?)
+    (str "<span class=\"ok\">shipped " (esc shipment-number)
+         " &middot; PPAP " (esc certificate-number) "</span>")
+
+    part-lot-shipped?
+    (str "<span class=\"warn\">shipped " (esc shipment-number)
+         " &middot; no PPAP certificate</span>")
+
+    ppap-certified?
+    (str "<span class=\"warn\">PPAP " (esc certificate-number)
+         " &middot; not shipped</span>")
+
+    :else "<span class=\"muted\">held in plant</span>"))
+
+(defn- part-lot-row [ledger {:keys [id part-lot-name jurisdiction] :as part-lot}]
+  (str "        <tr><td><code>" (esc id) "</code></td><td>" (esc part-lot-name)
+       "</td><td>" (esc jurisdiction)
+       "</td><td>" (dppm-cell part-lot)
+       "</td><td>" (proof-load-cell part-lot)
+       "</td><td>" (lifecycle-cell part-lot)
+       "</td><td>" (status-cell ledger id)
+       "</td></tr>"))
+
+(defn- hold-rows
+  "One row per VIOLATION (a single hold can carry several), read
+  straight out of the ledger facts `autoparts.governor/hold-fact`
+  wrote. `:detail` is the governor's own message, unedited."
+  [ledger]
+  (for [f ledger
+        :when (= :governor-hold (:t f))
+        v (:violations f)]
+    (str "        <tr><td><code>" (esc (str (:rule v)))
+         "</code></td><td><code>" (esc (str (:op f)))
+         "</code></td><td><code>" (esc (:subject f))
+         "</code></td><td>" (esc (:detail v)) "</td></tr>")))
+
+(defn- ledger-row [{:keys [t op subject basis]}]
+  (str "        <tr><td>" (esc (str t))
+       "</td><td><code>" (esc (str op))
+       "</code></td><td><code>" (esc subject)
+       "</code></td><td>" (esc (basis-str basis)) "</td></tr>"))
+
+(defn- draft-row [r]
+  (str "        <tr><td><code>" (esc (get r "record_id"))
+       "</code></td><td>" (esc (get r "kind"))
+       "</td><td><code>" (esc (get r "part_lot_id"))
+       "</code></td><td>" (esc (get r "jurisdiction"))
+       "</td><td><span class=\"warn\">unsigned draft</span></td></tr>"))
+
+(defn- count-row [[k v]]
+  (str "        <tr><td>" (esc (name k)) "</td><td>" (esc v) "</td></tr>"))
+
+(def ^:private action-gate-rows
+  ;; The ONLY hand-described block on the page. It documents this
+  ;; actor's FIXED op contract (`autoparts.phase/phases`,
+  ;; `autoparts.governor/high-stakes`) -- structural behaviour that does
+  ;; not vary run to run -- rather than this run's telemetry, so it is
+  ;; legitimately prose rather than derived output. Everything else on
+  ;; the page comes from the store.
+  ["        <tr><td><code>:part-lot/intake</code></td><td>none</td><td><span class=\"ok\">phase-3 auto-commit when governor-clean (no capital risk)</span></td></tr>"
+   "        <tr><td><code>:ppap-evidence/verify</code></td><td>none</td><td><span class=\"warn\">human approval &middot; HARD hold if no official spec-basis is cited</span></td></tr>"
+   "        <tr><td><code>:process-capability/screen</code></td><td>none</td><td><span class=\"warn\">human approval &middot; HARD hold on its own unresolved-defect finding</span></td></tr>"
+   "        <tr><td><code>:robotics/simulate-inspection-cell</code></td><td>none</td><td><span class=\"warn\">human approval &middot; runs the real physics-2d proof-load pull test</span></td></tr>"
+   "        <tr><td><code>:actuation/ship-part-lot</code></td><td><span class=\"critical\">safety-critical</span></td><td><span class=\"warn\">ALWAYS human approval, at every phase &middot; evidence + robot-sim + DPPM + upstream-pedigree + double-shipment checks</span></td></tr>"
+   "        <tr><td><code>:actuation/issue-ppap-certificate</code></td><td><span class=\"critical\">safety-critical</span></td><td><span class=\"warn\">ALWAYS human approval, at every phase &middot; evidence + process-capability + double-issuance checks</span></td></tr>"])
+
+(defn render
+  "Renders the operator-console document from a store `db` that has
+  already been driven by `run-demo!` (or any other real scenario). Pure
+  read-back: this fn never invents a value it did not read from the
+  store or recompute with the domain's own predicates."
+  [db]
+  (let [ledger (vec (store/ledger db))
+        part-lots (store/all-part-lots db)
+        counts (:counts (export/audit-package db))
+        hold-facts (filter #(= :governor-hold (:t %)) ledger)
+        holds (hold-rows ledger)]
+    (str
+     "<html><head><meta charset=\"utf-8\">"
+     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+     "<title>cloud-itonami-isic-2930 &middot; auto-parts manufacturing</title><style>\n"
+     (jp-go-dds.skin/dds+skin)
+     "\n</style></head><body>\n"
+     "<header class=\"bar\">\n"
+     "  <h1>Manufacture of parts and accessories for motor vehicles (ISIC 2930) — Operator Console</h1>\n"
+     "  <span class=\"badge\">read-only sample · governor-gated · never dispatches hardware</span>\n"
+     "</header>\n"
+     "<main>\n"
+
+     "  <section class=\"card\">\n"
+     "    <h2>Part-lots</h2>\n"
+     "    <p class=\"muted\">Build-time snapshot generated by actually running the actor: <code>clojure -M:dev:render-html</code> seeds <code>autoparts.store</code>, drives <code>autoparts.operation</code> and reads the result back. DPPM and proof-load verdicts below are recomputed here by <code>autoparts.registry/part-lot-dppm-out-of-range?</code> and <code>autoparts.robotics/simulation-out-of-tolerance?</code> — the same ground-truth predicates the governor uses, never a stored self-report.</p>\n"
+     "    <table>\n"
+     "      <thead><tr><th>Lot</th><th>Name</th><th>Jurisdiction</th><th>DPPM vs quality agreement</th><th>Simulated proof load</th><th>Actuation state</th><th>Last decision this run</th></tr></thead>\n"
+     "      <tbody>\n"
+     (str/join "\n" (map (partial part-lot-row ledger) part-lots)) "\n"
+     "      </tbody>\n"
+     "    </table>\n"
+     "  </section>\n"
+
+     "  <section class=\"card\">\n"
+     "    <h2>HARD governor holds this run (" (count hold-facts) " holds, "
+     (count holds) " violations)</h2>\n"
+     "    <p class=\"muted\">A HARD violation is un-overridable: the run never reaches the human-approval node at all, and nothing is written to the SSoT. One hold can carry several violations, so there is one row per violation. Rules and details below are the governor's own, read out of the append-only ledger.</p>\n"
+     "    <table>\n"
+     "      <thead><tr><th>Rule</th><th>Op</th><th>Lot</th><th>Governor detail</th></tr></thead>\n"
+     "      <tbody>\n"
+     (str/join "\n" holds) "\n"
+     "      </tbody>\n"
+     "    </table>\n"
+     "  </section>\n"
+
+     "  <section class=\"card\">\n"
+     "    <h2>Action gate (Auto-Parts Governor)</h2>\n"
+     "    <p class=\"muted\">This table documents the actor's fixed op contract (<code>autoparts.phase</code>, <code>autoparts.governor</code>) rather than this run's telemetry — the one hand-described block on the page. Shipping a part-lot and issuing a PPAP certificate are never in any phase's <code>:auto</code> set, and the governor independently escalates them too: two layers agree that actuation is always a human call.</p>\n"
+     "    <table>\n"
+     "      <thead><tr><th>Op</th><th>Stake</th><th>Gate</th></tr></thead>\n"
+     "      <tbody>\n"
+     (str/join "\n" action-gate-rows) "\n"
+     "      </tbody>\n"
+     "    </table>\n"
+     "  </section>\n"
+
+     "  <section class=\"card\">\n"
+     "    <h2>Registry drafts issued this run</h2>\n"
+     "    <p class=\"muted\">Reference numbers built by <code>autoparts.registry</code> and committed to the store — a record the manufacturer would keep, not an act on any plant/MES control system. Every certificate this actor produces is unsigned: signing and OEM-portal submission are the plant's own acts.</p>\n"
+     "    <table>\n"
+     "      <thead><tr><th>Reference</th><th>Kind</th><th>Lot</th><th>Jurisdiction</th><th>Signature</th></tr></thead>\n"
+     "      <tbody>\n"
+     (str/join "\n" (map draft-row (concat (store/shipment-history db)
+                                           (store/certificate-history db)))) "\n"
+     "      </tbody>\n"
+     "    </table>\n"
+     "  </section>\n"
+
+     "  <section class=\"card\">\n"
+     "    <h2>Audit ledger (this run, " (count ledger) " facts)</h2>\n"
+     "    <p class=\"muted\">Append-only decision-fact log — every commit and every hold this scenario produced, in order.</p>\n"
+     "    <table>\n"
+     "      <thead><tr><th>Fact</th><th>Op</th><th>Lot</th><th>Basis</th></tr></thead>\n"
+     "      <tbody>\n"
+     (str/join "\n" (map ledger-row ledger)) "\n"
+     "      </tbody>\n"
+     "    </table>\n"
+     "  </section>\n"
+
+     "  <section class=\"card\">\n"
+     "    <h2>Social hand-off</h2>\n"
+     "    <p class=\"muted\">Counts from <code>autoparts.export/audit-package</code> — the package body an auto-parts manufacturer hands to OEM quality auditors or market-regulator inspectors (<code>clojure -M:dev:export</code> also writes the CSV bundle).</p>\n"
+     "    <table>\n"
+     "      <thead><tr><th>Collection</th><th>Rows</th></tr></thead>\n"
+     "      <tbody>\n"
+     (str/join "\n" (map count-row (sort-by key counts))) "\n"
+     "      </tbody>\n"
+     "    </table>\n"
+     "  </section>\n"
+
+     "</main>\n"
+     "<footer>\n"
+     "  <p class=\"muted\">Generated by <code>autoparts.render-html</code> from a real actor run. Deterministic: no timestamps, no randomness — regenerating without a code change produces a byte-identical file.</p>\n"
+     "</footer>\n"
+     "</body></html>\n")))
+
+(defn -main [& args]
+  (let [out (or (first args) "docs/samples/operator-console.html")
+        db (run-demo!)
+        html (render db)]
+    (spit out html :encoding "UTF-8")
+    (println "wrote" out
+             (str "(" (count (store/ledger db)) " ledger facts, "
+                  (count (filter #(= :governor-hold (:t %)) (store/ledger db)))
+                  " HARD holds, "
+                  (count (store/shipment-history db)) " shipment drafts, "
+                  (count (store/certificate-history db)) " PPAP certificate drafts)"))))
