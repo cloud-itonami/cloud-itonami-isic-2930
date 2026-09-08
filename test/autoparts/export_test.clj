@@ -2,7 +2,7 @@
   "Audit-package export contract -- social/regulatory hand-off shape,
   plus `pedigree-for-part-lot`'s cross-actor supply-chain-linkage
   export (ADR-2607999960)."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is testing]]
             [kotoba.pedigree :as pedigree]
             [langgraph.graph :as g]
