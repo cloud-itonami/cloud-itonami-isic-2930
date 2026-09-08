@@ -47,7 +47,7 @@
   Usage: `clojure -M:dev:render-html [out-file]`
   (default `docs/samples/operator-console.html`)."
   (:require [jp-go-dds.skin]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             [autoparts.export :as export]
             [autoparts.operation :as op]
             [autoparts.registry :as registry]

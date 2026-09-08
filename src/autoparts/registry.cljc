@@ -29,7 +29,7 @@
   action or issuing the PPAP certificate itself (that is `autoparts.
   operation`'s `:actuation/ship-part-lot`/`:actuation/issue-ppap-
   certificate`, always human-gated -- see README `Actuation`)."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 (defn- unsigned-certificate
   "Every certificate this actor produces is UNSIGNED -- signature is the
@@ -74,7 +74,7 @@
     (throw (ex-info "part-lot-shipment: jurisdiction required" {})))
   (when (< sequence 0)
     (throw (ex-info "part-lot-shipment: sequence must be >= 0" {})))
-  (let [shipment-number (str (str/upper-case jurisdiction) "-SHP-" (zero-pad sequence 6))
+  (let [shipment-number (str (str/upper jurisdiction) "-SHP-" (zero-pad sequence 6))
         record {"record_id" shipment-number
                 "kind" "part-lot-shipment-draft"
                 "part_lot_id" part-lot-id
@@ -99,7 +99,7 @@
     (throw (ex-info "ppap-certificate: jurisdiction required" {})))
   (when (< sequence 0)
     (throw (ex-info "ppap-certificate: sequence must be >= 0" {})))
-  (let [certificate-number (str (str/upper-case jurisdiction) "-PPAP-" (zero-pad sequence 6))
+  (let [certificate-number (str (str/upper jurisdiction) "-PPAP-" (zero-pad sequence 6))
         record {"record_id" certificate-number
                 "kind" "ppap-certificate-draft"
                 "part_lot_id" part-lot-id
