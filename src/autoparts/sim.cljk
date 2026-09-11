@@ -1,5 +1,5 @@
 (ns autoparts.sim
-  "Demo driver -- `clojure -M:dev:run`. Walks a clean part-lot through
+  "Demo driver -- `kbb -M:dev:run`. Walks a clean part-lot through
   intake -> (an evidence-incomplete shipment attempt) -> PPAP evidence
   verification -> process-capability screening -> robot CMM/torque/
   weld-inspection mission -> part-lot-shipment proposal (always
