@@ -11,7 +11,7 @@
   see deps.edn) to produce the pedigree this actor's governor then
   independently re-verifies.
 
-  Run with `clojure -M:dev:cross-repo-test` -- kept OUT of the default
+  Run with `kbb -M:dev:cross-repo-test` -- kept OUT of the default
   `:test` alias (this file lives in `test-cross-repo/`, a separate
   source root) because it requires a same-org sibling checkout of
   `cloud-itonami-isic-2410` (`:local/root \"../cloud-itonami-isic-
