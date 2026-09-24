@@ -1,0 +1,97 @@
+(ns autoparts.physics-probe
+  "The physical-AI bot's measurement: run this actor's REAL `physics-2d`
+  weld-joint / fastener proof-load pull test (`autoparts.robotics`, a
+  dynamic-rate tensile-shear pull) over a fixed sweep and print ONE EDN map of the
+  physical quantities it computed.
+
+    kbb -M:dev:physics
+
+  This is what the resident bot (hermes/profiles/physai-isic-2930/SOUL.md)
+  reads every tick. Every number below is derived from a time-stepped
+  trajectory by `autoparts.robotics/run-pull-test`, never typed in.
+  Output schema `itonami.physical-ai.probe.v1`:
+
+    {:physics-probe/schema \"itonami.physical-ai.probe.v1\"
+     :repo :procedure :solver
+     :runs     [{:input {...} :quantities {...} :out-of-tolerance? bool} ...]
+     :derived  {...}   ; quantities computed ACROSS runs
+     :count n :expected n}
+
+  `:count` is an evidence floor: 0 means \"could not measure\", never
+  \"nothing out of tolerance\". Exit 0 when every run produced numbers,
+  2 when any run did not."
+  (:require [autoparts.robotics :as robotics]))
+
+(def schema "itonami.physical-ai.probe.v1")
+
+(def sweep-joint-masses-kg
+  "Effective participating masses swept at the default coupon geometry.
+  1.0 / 3.0 / 2.5 kg are the fixtures `robotics-test` / `motionplan-test`
+  pin; 1.5 and 5.0 bracket the proof-load floor from both sides."
+  [1.0 1.5 2.5 3.0 5.0])
+
+(def sweep-specimen-dims-mm
+  "Real coupon-envelope measurements swept at 2.5 kg -- the small/large
+  pair `robotics-test` uses plus the `scene-test` part-lot. The pull
+  test's docstring claims the load is geometry-invariant; this sweep
+  measures that claim every tick instead of trusting it."
+  [{:specimen-length-mm 10.0 :specimen-width-mm 40.0}
+   {:specimen-length-mm 35.0 :specimen-width-mm 90.0}
+   {:specimen-length-mm 80.0 :specimen-width-mm 160.0}])
+
+(def geometry-sweep-mass-kg 2.5)
+
+(defn- run-one [part-lot]
+  (let [t (robotics/pull-test-telemetry-for part-lot)]
+    {:input part-lot
+     :quantities t
+     :out-of-tolerance? (robotics/proof-load-out-of-tolerance? t)}))
+
+(defn- load-at [mass-kg]
+  (:sim-proof-load-force (robotics/pull-test-telemetry-for {:joint-mass-kg mass-kg})))
+
+(defn min-passing-joint-mass-kg
+  "Smallest effective joint mass whose simulated proof load reaches
+  `robotics/min-proof-load-n`, by bisection over the REAL simulation
+  (load is monotone in mass at fixed speed/travel -- pinned by
+  `robotics-test`). nil when the bracket does not straddle the floor."
+  ([] (min-passing-joint-mass-kg 0.001 20.0 40))
+  ([lo hi iters]
+   (let [floor robotics/min-proof-load-n]
+     (when (and (< (load-at lo) floor) (>= (load-at hi) floor))
+       (loop [lo lo hi hi i 0]
+         (if (>= i iters)
+           hi
+           (let [mid (/ (+ lo hi) 2.0)]
+             (if (>= (load-at mid) floor)
+               (recur lo mid (inc i))
+               (recur mid hi (inc i))))))))))
+
+(defn probe []
+  (let [mass-runs (mapv #(run-one {:joint-mass-kg %}) sweep-joint-masses-kg)
+        geom-runs (mapv #(run-one (assoc % :joint-mass-kg geometry-sweep-mass-kg))
+                        sweep-specimen-dims-mm)
+        runs (into mass-runs geom-runs)
+        numeric? (fn [r] (number? (get-in r [:quantities :sim-proof-load-force])))
+        geom-loads (map #(get-in % [:quantities :sim-proof-load-force]) geom-runs)]
+    {:physics-probe/schema schema
+     :repo "cloud-itonami/cloud-itonami-isic-2930"
+     :procedure "weld-joint / fastener proof-load (tensile-shear) pull test at a dynamic rate, robot end-of-line inspection cell"
+     :solver "physics-2d/world-step"
+     :runs runs
+     :derived {:min-proof-load-n robotics/min-proof-load-n
+               :min-passing-joint-mass-kg (min-passing-joint-mass-kg)
+               ;; max - min proof load across the coupon-geometry sweep at
+               ;; fixed mass: 0 means the reading does not see geometry.
+               :geometry-load-spread-n
+               (when (every? number? geom-loads)
+                 (- (reduce max geom-loads) (reduce min geom-loads)))}
+     :count (count (filter numeric? runs))
+     :expected (+ (count sweep-joint-masses-kg) (count sweep-specimen-dims-mm))}))
+
+(defn -main [& _]
+  (let [p (probe)]
+    (prn p)
+    (when-not (= (:count p) (:expected p))
+      #?(:cljs (set! (.-exitCode js/process) 2)
+         :default (System/exit 2)))))
