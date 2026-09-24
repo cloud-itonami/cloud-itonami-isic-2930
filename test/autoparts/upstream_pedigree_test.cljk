@@ -10,7 +10,7 @@
   deps.edn); this file only proves the GOVERNOR check itself is
   correct in isolation, independent of which upstream actor produced
   the pedigree."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.pedigree :as pedigree]
             [langgraph.graph :as g]
             [autoparts.governor :as governor]

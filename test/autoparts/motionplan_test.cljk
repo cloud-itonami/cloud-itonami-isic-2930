@@ -2,7 +2,7 @@
   "autoparts.motionplan/motion-plan-for -- the Cartesian waypoint list
   built from autoparts.robotics/mission-actions's real 3-step sequence
   (ADR-2607160000)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [autoparts.cad :as cad]
             [autoparts.motionplan :as motionplan]
             [autoparts.robotics :as robotics]))

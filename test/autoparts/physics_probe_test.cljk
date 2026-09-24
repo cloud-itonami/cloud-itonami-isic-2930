@@ -4,7 +4,7 @@
   from the simulation (the derived boundary really straddles the floor),
   and that a changed solver would show -- including the geometry
   invariance `run-pull-test` discloses, which the probe now measures."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [autoparts.physics-probe :as probe]
             [autoparts.robotics :as robotics]))
 

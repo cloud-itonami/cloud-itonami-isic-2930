@@ -6,7 +6,7 @@
   docstring). Direct port of vdesign.scene's own scene_test.cljc
   assertions (ADR-2607151600), adapted to a plain part-lot map instead
   of running a langgraph design actor."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [autoparts.robotics :as robotics]
             [autoparts.scene :as scene]))
 

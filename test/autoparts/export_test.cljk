@@ -3,7 +3,7 @@
   plus `pedigree-for-part-lot`'s cross-actor supply-chain-linkage
   export (ADR-2607999960)."
   (:require [kotoba.lang.text :as str]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [kotoba.pedigree :as pedigree]
             [langgraph.graph :as g]
             [autoparts.export :as export]
