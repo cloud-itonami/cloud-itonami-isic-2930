@@ -1,0 +1,47 @@
+(ns autoparts.physics-probe-test
+  "The probe is the bot's only source of \"measured\"; these pin that it
+  measures (every run numeric, count = expected), that the numbers come
+  from the simulation (the derived boundary really straddles the floor),
+  and that a changed solver would show -- including the geometry
+  invariance `run-pull-test` discloses, which the probe now measures."
+  (:require [clojure.test :refer [deftest is testing]]
+            [autoparts.physics-probe :as probe]
+            [autoparts.robotics :as robotics]))
+
+(deftest probe-measures-every-run
+  (let [p (probe/probe)]
+    (is (= "itonami.physical-ai.probe.v1" (:physics-probe/schema p)))
+    (is (pos? (:count p)))
+    (is (= (:count p) (:expected p) (count (:runs p))))
+    (testing "every run carries a numeric load and tick count from the trajectory"
+      (doseq [r (:runs p)]
+        (is (number? (get-in r [:quantities :sim-proof-load-force])))
+        (is (pos? (get-in r [:quantities :ticks])))))))
+
+(defn- mass-runs [p] (take (count probe/sweep-joint-masses-kg) (:runs p)))
+
+(deftest load-rises-with-mass-across-the-sweep
+  (let [loads (map #(get-in % [:quantities :sim-proof-load-force]) (mass-runs (probe/probe)))]
+    (is (apply < loads))))
+
+(deftest sweep-straddles-the-proof-load-floor
+  (let [verdicts (map :out-of-tolerance? (mass-runs (probe/probe)))]
+    (is (true? (first verdicts)))
+    (is (false? (last verdicts)))))
+
+(deftest geometry-spread-is-measured-and-matches-the-disclosed-invariance
+  (let [spread (get-in (probe/probe) [:derived :geometry-load-spread-n])]
+    (is (number? spread))
+    (testing "run-pull-test's docstring: face-to-face gap is slack + travel regardless of AABB size"
+      (is (zero? spread)))))
+
+(deftest derived-boundary-straddles-the-floor
+  (let [m (probe/min-passing-joint-mass-kg)
+        load (fn [kg] (:sim-proof-load-force (robotics/pull-test-telemetry-for {:joint-mass-kg kg})))]
+    (is (number? m))
+    (testing "at the boundary the load reaches the floor; 1% lighter it does not"
+      (is (>= (load m) robotics/min-proof-load-n))
+      (is (< (load (* 0.99 m)) robotics/min-proof-load-n)))))
+
+(deftest bracket-that-does-not-straddle-answers-nil
+  (is (nil? (probe/min-passing-joint-mass-kg 5.0 10.0 10))))
