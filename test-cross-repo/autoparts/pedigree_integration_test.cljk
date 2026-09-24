@@ -21,7 +21,7 @@
   Still no live network call between actors at runtime: this is a
   build-time classpath dependency exercised by tests, same category
   as every other `:local/root` dependency in this fleet."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.pedigree :as pedigree]
             [langgraph.graph :as g]
             [steelworks.export :as steel-export]

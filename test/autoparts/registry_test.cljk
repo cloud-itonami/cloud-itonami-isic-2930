@@ -1,5 +1,5 @@
 (ns autoparts.registry-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [autoparts.registry :as r]))
 
 ;; ----------------------------- part-lot-dppm-out-of-range? -----------------------------

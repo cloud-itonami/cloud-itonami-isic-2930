@@ -11,7 +11,7 @@
   single-tick 'boxcar' collision technique (see run-pull-test's
   docstring), asserted here so a future change that accidentally
   breaks the invariant is caught."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [autoparts.cad :as cad]
             [autoparts.robotics :as robotics]))
 

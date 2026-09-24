@@ -2,7 +2,7 @@
   "autoparts.cad's real BREP packaging-envelope bridge (ADR-2607160000)
   -- envelope-dims-mm's real-vs-default fallback discipline, and
   envelope-solid/envelope-mesh's genuine tessellation output."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [autoparts.cad :as cad]
             [autoparts.robotics :as robotics]))
 
