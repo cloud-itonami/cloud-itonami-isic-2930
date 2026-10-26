@@ -10,15 +10,23 @@
         ;; kotoba.lang.edn replaced clojure.edn here (2026-09-23). An explicit floor:
         ;; tools.deps takes the NEWEST sha it is shown, and kbb resolves git deps
         ;; only from nbb.edn, so every project file this repo has names it.
-        io.github.kotoba-lang/edn {:git/sha "79dba32c8892058842c57783f06a2dfe4601aeb0"}
+        io.github.kotoba-lang/edn
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "7e1dbe0aece831138e6106c59d2b26375d0f60c4"
+         :deps/root "lib/kotoba.edn"}
        ;; kotoba.test (clojure.test-compatible surface), not clojure.test --
         ;; scripts/migrate-clojure-test-to-kotoba-test.cljk. Explicit floor.
-        io.github.kotoba-lang/test {:git/url "https://github.com/kotoba-lang/test.git"
-                                    :git/sha "2ab4885f99fd25552d380d0f6b0b54c5a72eb7ae"}
+        io.github.kotoba-lang/test
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "7e1dbe0aece831138e6106c59d2b26375d0f60c4"
+         :deps/root "lib/kotoba.test"}
         ;; kotoba.lang.text, not clojure.string. Pinned as an explicit floor:
         ;; tools.deps takes the NEWEST sha it is shown, so without a floor here
         ;; this repo silently rides whatever a sibling happens to name.
-        io.github.kotoba-lang/text {:git/sha "73bdb13ae7a3d004b44bca08be03a3191157a38f"}
+        io.github.kotoba-lang/text
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "7e1dbe0aece831138e6106c59d2b26375d0f60c4"
+         :deps/root "lib/kotoba.text"}
        ;; Workspace BASE design system (デジタル庁デザインシステム / DADS --
         ;; com-junkawasaki/root AGENTS.md "UI/UX 標準"). Consumed as a
         ;; PINNED git coordinate rather than :local/root, the same shape
@@ -27,14 +35,15 @@
         ;; `autoparts.render-html` (JVM, build-time) requires it -- the
         ;; actor itself has no UI dependency at all.
         io.github.kotoba-lang/jp-go-digital-design-system
-        {:git/url "https://github.com/kotoba-lang/jp-go-digital-design-system"
-         :git/sha "83db99546eabc53613ae826ea41d1533a3c574af"}
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "7e1dbe0aece831138e6106c59d2b26375d0f60c4"
+         :deps/root "lib/kotoba.jpGoDigitalDesignSystem"}
         io.github.kotoba-lang/langgraph
-        {:local/root "../../kotoba-lang/langgraph"}
+        {:local/root "../../kotoba-lang/kotoba/lib/kotoba.langgraph"}
         io.github.kotoba-lang/langchain-store
-        {:local/root "../../kotoba-lang/langchain-store"}
+        {:local/root "../../kotoba-lang/kotoba/lib/kotoba.langchainStore"}
         io.github.kotoba-lang/robotics
-        {:local/root "../../kotoba-lang/robotics"}
+        {:local/root "../../kotoba-lang/kotoba/lib/kotoba.robotics"}
         ;; REAL engineering-simulation dependency (ADR-2607152000, extending
         ;; ADR-2607151600's automotive pilot to this vertical): autoparts.
         ;; robotics now actually calls physics-2d/world-step -- a real,
@@ -46,8 +55,9 @@
         ;; physics module is built directly in autoparts.robotics and the
         ;; ONLY new dependency is physics-2d itself.
         io.github.kotoba-lang/physics-2d
-        {:git/url "https://github.com/kotoba-lang/physics-2d.git"
-         :git/sha "03b6c23c8d9aa36b92a8130fd3e37fc2548b4d26"}
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "7e1dbe0aece831138e6106c59d2b26375d0f60c4"
+         :deps/root "lib/kotoba.physics2d"}
         ;; REAL CAD/BREP bridge (ADR-2607160000, extending ADR-2607152000/
         ;; ADR-2607151600's real-engineering-simulation pattern to this
         ;; vertical's own digital-twin pilot): autoparts.cad now actually
@@ -65,8 +75,9 @@
         ;; see autoparts.scene's docstring for the same disclosed limitation
         ;; vdesign.scene documents).
         io.github.kotoba-lang/org-iso-10303
-        {:git/url "https://github.com/kotoba-lang/org-iso-10303.git"
-         :git/sha "a1de3b075bcdcfbfb75c781eb88e3d07195831cf"}
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "7e1dbe0aece831138e6106c59d2b26375d0f60c4"
+         :deps/root "lib/org.iso.std10303"}
         ;; Cross-actor supply-chain-linkage contract (ADR-2607999950,
         ;; extended by ADR-2607999960): `autoparts.governor`
         ;; independently re-verifies an optional `:upstream-pedigree`
@@ -88,13 +99,14 @@
         ;; single-hop pedigrees, never embeds an upstream one) so its
         ;; pin is left alone, out of this ADR's scope.
         io.github.kotoba-lang/pedigree
-        {:git/url "https://github.com/kotoba-lang/pedigree.git"
-         :git/sha "f85784211422a651fea26f448f601abfba2e7d61"}}
+        {:git/url "https://github.com/kotoba-lang/kotoba.git"
+         :git/sha "7e1dbe0aece831138e6106c59d2b26375d0f60c4"
+         :deps/root "lib/kotoba.pedigree"}}
  :aliases
  {;; offline workspace dev -- pin transitive langchain to local checkout
   :dev {:override-deps
         {io.github.kotoba-lang/langchain
-         {:local/root "../../kotoba-lang/langchain"}}}
+        {:local/root "../../kotoba-lang/kotoba/lib/kotoba.langchain"}}}
   ;; kbb -M:dev:run  -> drive the demo through one OperationActor
   :run {:main-opts ["-m" "autoparts.sim"]}
   ;; kbb -M:dev:physics -> the physical-AI bot's measurement (hermes/profiles/physai-isic-2930/SOUL.md):
